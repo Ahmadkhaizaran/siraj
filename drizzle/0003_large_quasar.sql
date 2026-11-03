@@ -1,0 +1,1 @@
+ALTER TABLE `mosques` ADD `kind` text DEFAULT 'mosque' NOT NULL;

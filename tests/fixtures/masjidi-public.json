@@ -1,0 +1,54 @@
+{
+  "67": {
+    "configuration": {
+      "id": "67",
+      "templateData": {
+        "masjidId": "67",
+        "masjidName": "مسجد الزيتونة",
+        "masjidCity": "صيدا",
+        "masjidCountry": "لبنان",
+        "masjidAddress": "نزلة صيدون"
+      },
+      "notifications": [
+        {
+          "duration": 10,
+          "url": "",
+          "id": "2022",
+          "name": "ما لا يقال لك",
+          "startDate": "2026-11-01",
+          "endDate": null,
+          "textHeader": null,
+          "textFooter": null,
+          "uniqueId": "MAAL",
+          "type": "lecture",
+          "data": {
+            "id": "801",
+            "name": "ما لا يقال لك",
+            "lecturer": "",
+            "notes": "",
+            "url": "",
+            "lectureScheduleType": "recurring",
+            "lectureTimingType": "postprayer",
+            "lectureRecurringWeekdays": "thu",
+            "lecturePostprayerPrayer": "Isha",
+            "lectureInstantTime": null,
+            "lectureOnceDate": null
+          }
+        }
+      ]
+    }
+  },
+  "111": {
+    "configuration": {
+      "id": "111",
+      "templateData": {
+        "masjidId": "111",
+        "masjidName": "مسجد حبر الأمة عبدالله بن عباس",
+        "masjidCity": "الفوار",
+        "masjidCountry": "لبنان",
+        "masjidAddress": "الفوار"
+      },
+      "notifications": []
+    }
+  }
+}

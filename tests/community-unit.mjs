@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { mkdir,readFile } from 'node:fs/promises';
+const req=createRequire(import.meta.resolve('wrangler/package.json'));
+const {build}=req('esbuild');await mkdir('outputs',{recursive:true});
+await build({stdin:{contents:"export * from './lib/islamic-calendar.ts';export * from './lib/masjidi.ts';export * from './lib/hadiths.ts';",resolveDir:process.cwd(),loader:'ts'},bundle:true,format:'esm',platform:'node',outfile:'outputs/calendar-unit.mjs'});
+const {parseMasjidi,MASJIDI_SOURCES,occursOn,nextOccurrence,hijriParts,islamicOccasions,addDays,HADITHS,dailyHadith,beirutDay}=await import('../outputs/calendar-unit.mjs?'+Date.now());
+const fixtures=JSON.parse(await readFile('tests/fixtures/masjidi-public.json','utf8'));
+const htmlFor=data=>'<masjidi-data data="'+JSON.stringify(data).replaceAll('&','&amp;').replaceAll('"','&quot;')+'"></masjidi-data>';
+const event=parseMasjidi(htmlFor(fixtures['67']),MASJIDI_SOURCES[0])[0];
+assert.equal(event.title,'ما لا يقال لك');assert.equal(event.weekdays,'thu');assert.equal(event.time_label,'بعد صلاة العشاء');
+assert.equal(occursOn(event,'2026-11-05'),true);assert.equal(occursOn(event,'2026-11-06'),false);assert.equal(nextOccurrence(event,'2026-11-02'),'2026-11-05');
+assert.equal(nextOccurrence({...event,starts_on:'2027-03-01'},'2026-11-02'),'2027-03-04');
+assert.equal(nextOccurrence({...event,status:'cancelled'},'2026-11-02'),null);
+assert.equal(nextOccurrence({...event,ends_on:'2026-11-04'},'2026-11-02'),null);
+assert.equal(parseMasjidi(htmlFor(fixtures['111']),MASJIDI_SOURCES[1]).length,0);
+assert.throws(()=>parseMasjidi('<html>unavailable</html>',MASJIDI_SOURCES[0]));assert.throws(()=>parseMasjidi(htmlFor(fixtures['67']),MASJIDI_SOURCES[1]));
+const once=structuredClone(fixtures['67']);Object.assign(once.configuration.notifications[0].data,{lectureScheduleType:'once',lectureOnceDate:'2026-11-05',lectureTimingType:'instant',lectureInstantTime:'18:30'});const e2=parseMasjidi(htmlFor(once),MASJIDI_SOURCES[0])[0];assert.equal(e2.starts_on,'2026-11-05');assert.equal(e2.weekdays,'');assert.equal(e2.time_label,'18:30');
+assert.equal(addDays('2026-12-31',1),'2027-01-01');assert.equal(beirutDay(new Date('2026-11-01T23:30:00Z')),'2026-11-02');
+const occasions=islamicOccasions('2026-11-02');assert.equal(occasions.length,6);assert.ok(occasions.every(o=>o.days_left>=0&&o.estimated));const ramadan=occasions.find(o=>o.month===9);assert.deepEqual(hijriParts(ramadan.date),{year:1448,month:9,day:1});assert.equal(ramadan.days_left,Math.round((Date.parse(ramadan.date)-Date.parse('2026-11-02'))/86400000));
+assert.equal(HADITHS.length,14);assert.equal(new Set(HADITHS.map(h=>h.id)).size,14);for(const h of HADITHS){assert.ok(['صحيح البخاري','صحيح مسلم'].includes(h.collection));assert.match(h.url,/^https:\/\/sunnah\.com\/(bukhari|muslim):\d+[ab]?$/);assert.ok(h.url.endsWith(h.reference));assert.ok(h.book&&h.text&&h.topic);}
+for(const id of ['m2699-circles','m2699-knowledge','m804','b1','b6018'])assert.equal(HADITHS.find(h=>h.id===id).excerpt,true);
+assert.ok(HADITHS.find(h=>h.id==='b6406').text.endsWith('سُبْحَانَ اللَّهِ الْعَظِيمِ، سُبْحَانَ اللَّهِ وَبِحَمْدِهِ.'));
+assert.equal(dailyHadith('2026-11-02').id,dailyHadith('2026-11-02').id);assert.notEqual(dailyHadith('2026-11-02').id,dailyHadith('2026-11-03').id);
+console.log('PASS: Masjidi public-feed parsing, Thursday recurrence, future and cancelled events, Beirut date boundaries, Hijri estimates and 14 Sahih-only references.');

@@ -1,0 +1,366 @@
+-- Siraj initial PostgreSQL schema, generated from Drizzle snapshot 0008.
+
+-- No account records, passwords or runtime secrets. Apply once to a fresh siraj schema.
+
+CREATE SCHEMA siraj;
+
+REVOKE ALL ON SCHEMA siraj FROM PUBLIC, anon, authenticated;
+
+CREATE TABLE siraj."activity" (
+  "id" text PRIMARY KEY NOT NULL,
+  "mosque_id" text,
+  "actor_id" text NOT NULL,
+  "message" text NOT NULL,
+  "created_at" text NOT NULL
+);
+
+CREATE INDEX "activity_mosque_idx" ON siraj."activity" ("mosque_id");
+
+ALTER TABLE siraj."activity" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."assessments" (
+  "id" text PRIMARY KEY NOT NULL,
+  "student_id" text NOT NULL,
+  "day" text NOT NULL,
+  "surah" bigint NOT NULL,
+  "memorization" bigint NOT NULL,
+  "retention" bigint NOT NULL,
+  "tajweed" bigint NOT NULL,
+  "performance" bigint NOT NULL,
+  "maximum" bigint NOT NULL DEFAULT 4,
+  "notes" text NOT NULL DEFAULT '',
+  "created_by" text NOT NULL,
+  "created_at" text NOT NULL
+);
+
+CREATE INDEX "assessments_student" ON siraj."assessments" ("student_id", "day");
+
+ALTER TABLE siraj."assessments" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."auth_attempts" (
+  "key" text PRIMARY KEY NOT NULL,
+  "count" bigint NOT NULL DEFAULT 0,
+  "expires_at" bigint NOT NULL
+);
+
+ALTER TABLE siraj."auth_attempts" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."attendance" (
+  "id" text PRIMARY KEY NOT NULL,
+  "mosque_id" text NOT NULL,
+  "student_id" text NOT NULL,
+  "day" text NOT NULL,
+  "status" text NOT NULL,
+  "created_by" text NOT NULL
+);
+
+CREATE UNIQUE INDEX "attendance_student_day" ON siraj."attendance" ("student_id", "day");
+
+CREATE INDEX "attendance_mosque_idx" ON siraj."attendance" ("mosque_id", "day");
+
+ALTER TABLE siraj."attendance" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."calendar_events" (
+  "id" text PRIMARY KEY NOT NULL,
+  "source_id" bigint,
+  "mosque_id" text,
+  "mosque_name" text NOT NULL,
+  "title" text NOT NULL,
+  "description" text NOT NULL DEFAULT '',
+  "lecturer" text NOT NULL DEFAULT '',
+  "kind" text NOT NULL DEFAULT 'activity',
+  "starts_on" text,
+  "ends_on" text,
+  "weekdays" text NOT NULL DEFAULT '',
+  "time_label" text NOT NULL DEFAULT '',
+  "source_url" text,
+  "status" text NOT NULL DEFAULT 'active',
+  "content_hash" text NOT NULL,
+  "published_at" bigint NOT NULL,
+  "updated_at" bigint NOT NULL
+);
+
+CREATE INDEX "calendar_mosque_idx" ON siraj."calendar_events" ("mosque_id");
+
+CREATE INDEX "calendar_source_idx" ON siraj."calendar_events" ("source_id");
+
+ALTER TABLE siraj."calendar_events" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."calendar_sources" (
+  "id" bigint PRIMARY KEY NOT NULL,
+  "name" text NOT NULL,
+  "city" text NOT NULL,
+  "url" text NOT NULL,
+  "status" text NOT NULL DEFAULT 'pending',
+  "checked_at" bigint NOT NULL DEFAULT 0,
+  "success_at" bigint,
+  "error" text,
+  "event_count" bigint NOT NULL DEFAULT 0
+);
+
+ALTER TABLE siraj."calendar_sources" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."circles" (
+  "id" text PRIMARY KEY NOT NULL,
+  "mosque_id" text NOT NULL,
+  "name" text NOT NULL,
+  "teacher_id" text,
+  "level" text NOT NULL DEFAULT '',
+  "schedule" text NOT NULL DEFAULT '',
+  "status" text NOT NULL DEFAULT 'active',
+  "start_date" text,
+  "created_at" text NOT NULL
+);
+
+CREATE INDEX "circles_mosque_idx" ON siraj."circles" ("mosque_id");
+
+ALTER TABLE siraj."circles" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."community_reads" (
+  "user_id" text PRIMARY KEY NOT NULL,
+  "seen_at" bigint NOT NULL DEFAULT 0
+);
+
+ALTER TABLE siraj."community_reads" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."memorization" (
+  "student_id" text NOT NULL,
+  "surah" bigint NOT NULL,
+  "ranges" text NOT NULL DEFAULT '[]',
+  "revision" bigint NOT NULL DEFAULT 0,
+  "updated_by" text NOT NULL,
+  "updated_at" text NOT NULL
+);
+
+CREATE UNIQUE INDEX "memory_student_surah" ON siraj."memorization" ("student_id", "surah");
+
+ALTER TABLE siraj."memorization" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."mosques" (
+  "id" text PRIMARY KEY NOT NULL,
+  "name" text NOT NULL,
+  "kind" text NOT NULL DEFAULT 'mosque',
+  "city" text NOT NULL DEFAULT '',
+  "logo" text,
+  "cancelled_at" text,
+  "created_at" text NOT NULL
+);
+
+ALTER TABLE siraj."mosques" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."motivational_scores" (
+  "meeting" text NOT NULL DEFAULT 'اللقاء الأسبوعي',
+  "student_id" text NOT NULL,
+  "day" text NOT NULL,
+  "attendance" bigint NOT NULL,
+  "quran" bigint NOT NULL,
+  "religion" bigint NOT NULL,
+  "conduct" bigint NOT NULL,
+  "activity" bigint NOT NULL,
+  "points" bigint NOT NULL,
+  "notes" text NOT NULL DEFAULT '',
+  "revision" bigint NOT NULL DEFAULT 1,
+  "updated_by" text NOT NULL,
+  "updated_at" text NOT NULL
+);
+
+CREATE UNIQUE INDEX "motivation_student_day" ON siraj."motivational_scores" ("student_id", "day", "meeting");
+
+ALTER TABLE siraj."motivational_scores" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."platform_achievements" (
+  "number" bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY NOT NULL,
+  "student_id" text NOT NULL,
+  "rank" bigint NOT NULL,
+  "points" bigint NOT NULL,
+  "marks" text NOT NULL,
+  "meeting" text NOT NULL,
+  "day" text NOT NULL,
+  "created_at" text NOT NULL,
+  "seen_by" text,
+  "seen_at" text
+);
+
+CREATE UNIQUE INDEX "platform_achievement_student_rank" ON siraj."platform_achievements" ("student_id", "rank");
+
+ALTER TABLE siraj."platform_achievements" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."progress" (
+  "id" text PRIMARY KEY NOT NULL,
+  "mosque_id" text NOT NULL,
+  "student_id" text NOT NULL,
+  "day" text NOT NULL,
+  "kind" text NOT NULL,
+  "topic" text NOT NULL,
+  "score" bigint NOT NULL,
+  "notes" text NOT NULL DEFAULT '',
+  "created_by" text NOT NULL,
+  "created_at" text NOT NULL
+);
+
+CREATE INDEX "progress_mosque_idx" ON siraj."progress" ("mosque_id");
+
+ALTER TABLE siraj."progress" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."sessions" (
+  "token_hash" text PRIMARY KEY NOT NULL,
+  "user_id" text NOT NULL,
+  "expires_at" bigint NOT NULL
+);
+
+ALTER TABLE siraj."sessions" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."settings" (
+  "key" text PRIMARY KEY NOT NULL,
+  "value" text NOT NULL
+);
+
+ALTER TABLE siraj."settings" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."student_codes" (
+  "number" bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY NOT NULL,
+  "student_id" text NOT NULL
+);
+
+CREATE UNIQUE INDEX "student_codes_student_id_unique" ON siraj."student_codes" ("student_id");
+
+ALTER TABLE siraj."student_codes" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."students" (
+  "id" text PRIMARY KEY NOT NULL,
+  "mosque_id" text NOT NULL,
+  "circle_id" text,
+  "name" text NOT NULL,
+  "age" bigint,
+  "contact" text NOT NULL DEFAULT '',
+  "english_name" text NOT NULL DEFAULT '',
+  "nationality" text NOT NULL DEFAULT '',
+  "quran_level" text NOT NULL DEFAULT '',
+  "joined_on" text,
+  "contact_mode" text NOT NULL DEFAULT 'parent',
+  "status" text NOT NULL DEFAULT 'active',
+  "notes" text NOT NULL DEFAULT '',
+  "created_at" text NOT NULL
+);
+
+CREATE INDEX "students_mosque_idx" ON siraj."students" ("mosque_id");
+
+CREATE INDEX "students_circle_idx" ON siraj."students" ("circle_id");
+
+ALTER TABLE siraj."students" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."support_messages" (
+  "number" bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY NOT NULL,
+  "mosque_id" text NOT NULL,
+  "sender_id" text NOT NULL,
+  "body" text NOT NULL,
+  "created_at" text NOT NULL
+);
+
+CREATE INDEX "support_messages_mosque" ON siraj."support_messages" ("mosque_id", "number");
+
+ALTER TABLE siraj."support_messages" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."support_reads" (
+  "user_id" text NOT NULL,
+  "mosque_id" text NOT NULL,
+  "last_number" bigint NOT NULL DEFAULT 0
+);
+
+CREATE UNIQUE INDEX "support_reads_user_mosque" ON siraj."support_reads" ("user_id", "mosque_id");
+
+ALTER TABLE siraj."support_reads" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE siraj."users" (
+  "id" text PRIMARY KEY NOT NULL,
+  "mosque_id" text,
+  "name" text NOT NULL,
+  "username" text NOT NULL,
+  "password_hash" text NOT NULL,
+  "role" text NOT NULL,
+  "phone" text NOT NULL DEFAULT '',
+  "student_id" text,
+  "active" bigint NOT NULL DEFAULT 1,
+  "cancelled_at" text,
+  "created_at" text NOT NULL
+);
+
+CREATE UNIQUE INDEX "users_username_unique" ON siraj."users" ("username");
+
+CREATE UNIQUE INDEX "users_student_id_unique" ON siraj."users" ("student_id");
+
+CREATE INDEX "users_mosque_idx" ON siraj."users" ("mosque_id");
+
+ALTER TABLE siraj."users" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE siraj."activity" ADD FOREIGN KEY ("mosque_id") REFERENCES siraj."mosques" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."activity" ADD FOREIGN KEY ("actor_id") REFERENCES siraj."users" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."assessments" ADD FOREIGN KEY ("student_id") REFERENCES siraj."students" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."assessments" ADD FOREIGN KEY ("created_by") REFERENCES siraj."users" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."attendance" ADD FOREIGN KEY ("mosque_id") REFERENCES siraj."mosques" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."attendance" ADD FOREIGN KEY ("student_id") REFERENCES siraj."students" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."attendance" ADD FOREIGN KEY ("created_by") REFERENCES siraj."users" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."calendar_events" ADD FOREIGN KEY ("source_id") REFERENCES siraj."calendar_sources" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."calendar_events" ADD FOREIGN KEY ("mosque_id") REFERENCES siraj."mosques" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."circles" ADD FOREIGN KEY ("mosque_id") REFERENCES siraj."mosques" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."circles" ADD FOREIGN KEY ("teacher_id") REFERENCES siraj."users" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."community_reads" ADD FOREIGN KEY ("user_id") REFERENCES siraj."users" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."memorization" ADD FOREIGN KEY ("student_id") REFERENCES siraj."students" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."memorization" ADD FOREIGN KEY ("updated_by") REFERENCES siraj."users" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."motivational_scores" ADD FOREIGN KEY ("student_id") REFERENCES siraj."students" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."motivational_scores" ADD FOREIGN KEY ("updated_by") REFERENCES siraj."users" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."platform_achievements" ADD FOREIGN KEY ("student_id") REFERENCES siraj."students" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."platform_achievements" ADD FOREIGN KEY ("seen_by") REFERENCES siraj."users" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."progress" ADD FOREIGN KEY ("mosque_id") REFERENCES siraj."mosques" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."progress" ADD FOREIGN KEY ("student_id") REFERENCES siraj."students" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."progress" ADD FOREIGN KEY ("created_by") REFERENCES siraj."users" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."sessions" ADD FOREIGN KEY ("user_id") REFERENCES siraj."users" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."student_codes" ADD FOREIGN KEY ("student_id") REFERENCES siraj."students" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."students" ADD FOREIGN KEY ("mosque_id") REFERENCES siraj."mosques" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."students" ADD FOREIGN KEY ("circle_id") REFERENCES siraj."circles" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."support_messages" ADD FOREIGN KEY ("mosque_id") REFERENCES siraj."mosques" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."support_messages" ADD FOREIGN KEY ("sender_id") REFERENCES siraj."users" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."support_reads" ADD FOREIGN KEY ("user_id") REFERENCES siraj."users" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."support_reads" ADD FOREIGN KEY ("mosque_id") REFERENCES siraj."mosques" ("id") ON DELETE no action ON UPDATE no action;
+
+ALTER TABLE siraj."users" ADD FOREIGN KEY ("mosque_id") REFERENCES siraj."mosques" ("id") ON DELETE no action ON UPDATE no action;
+
+REVOKE ALL ON ALL TABLES IN SCHEMA siraj FROM PUBLIC, anon, authenticated;
+
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA siraj FROM PUBLIC, anon, authenticated;
+
+GRANT USAGE ON SCHEMA siraj TO service_role;
+
+GRANT ALL ON ALL TABLES IN SCHEMA siraj TO service_role;
+
+GRANT ALL ON ALL SEQUENCES IN SCHEMA siraj TO service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA siraj REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated;

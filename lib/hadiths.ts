@@ -1,0 +1,22 @@
+/** Reviewed Arabic matn from the two Sahih collections only. Excerpts are labelled.
+ * Sources verified 2026-11-02; source URLs identify each exact narration.
+ * No remote feed or generated text can add a hadith to this allowlist.
+ */
+export type Hadith={id:string;topic:string;text:string;collection:'صحيح البخاري'|'صحيح مسلم';reference:string;book:string;url:string;excerpt?:boolean};
+export const HADITHS:Hadith[]=[
+{id:'b5027',topic:'تعلّم القرآن وتعليمه',text:'خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ.',collection:'صحيح البخاري',reference:'5027',book:'كتاب فضائل القرآن',url:'https://sunnah.com/bukhari:5027'},
+{id:'m2699-circles',topic:'فضل مجالس القرآن',text:'وَمَا اجْتَمَعَ قَوْمٌ فِي بَيْتٍ مِنْ بُيُوتِ اللَّهِ يَتْلُونَ كِتَابَ اللَّهِ وَيَتَدَارَسُونَهُ بَيْنَهُمْ، إِلَّا نَزَلَتْ عَلَيْهِمُ السَّكِينَةُ، وَغَشِيَتْهُمُ الرَّحْمَةُ، وَحَفَّتْهُمُ الْمَلَائِكَةُ، وَذَكَرَهُمُ اللَّهُ فِيمَنْ عِنْدَهُ.',collection:'صحيح مسلم',reference:'2699a',book:'كتاب الذكر والدعاء والتوبة والاستغفار',url:'https://sunnah.com/muslim:2699a',excerpt:true},
+{id:'m2699-knowledge',topic:'فضل طلب العلم',text:'وَمَنْ سَلَكَ طَرِيقًا يَلْتَمِسُ فِيهِ عِلْمًا، سَهَّلَ اللَّهُ لَهُ بِهِ طَرِيقًا إِلَى الْجَنَّةِ.',collection:'صحيح مسلم',reference:'2699a',book:'كتاب الذكر والدعاء والتوبة والاستغفار',url:'https://sunnah.com/muslim:2699a',excerpt:true},
+{id:'m804',topic:'فضل قراءة القرآن',text:'اقْرَءُوا الْقُرْآنَ، فَإِنَّهُ يَأْتِي يَوْمَ الْقِيَامَةِ شَفِيعًا لِأَصْحَابِهِ.',collection:'صحيح مسلم',reference:'804a',book:'كتاب صلاة المسافرين وقصرها',url:'https://sunnah.com/muslim:804a',excerpt:true},
+{id:'m798',topic:'أجر المجتهد في التلاوة',text:'الْمَاهِرُ بِالْقُرْآنِ مَعَ السَّفَرَةِ الْكِرَامِ الْبَرَرَةِ، وَالَّذِي يَقْرَأُ الْقُرْآنَ وَيَتَتَعْتَعُ فِيهِ وَهُوَ عَلَيْهِ شَاقٌّ لَهُ أَجْرَانِ.',collection:'صحيح مسلم',reference:'798a',book:'كتاب صلاة المسافرين وقصرها',url:'https://sunnah.com/muslim:798a'},
+{id:'m2702',topic:'التوبة إلى الله',text:'يَا أَيُّهَا النَّاسُ تُوبُوا إِلَى اللَّهِ، فَإِنِّي أَتُوبُ فِي الْيَوْمِ إِلَيْهِ مِائَةَ مَرَّةٍ.',collection:'صحيح مسلم',reference:'2702b',book:'كتاب الذكر والدعاء والتوبة والاستغفار',url:'https://sunnah.com/muslim:2702b'},
+{id:'b6307',topic:'الإكثار من الاستغفار',text:'وَاللَّهِ إِنِّي لَأَسْتَغْفِرُ اللَّهَ وَأَتُوبُ إِلَيْهِ فِي الْيَوْمِ أَكْثَرَ مِنْ سَبْعِينَ مَرَّةً.',collection:'صحيح البخاري',reference:'6307',book:'كتاب الدعوات',url:'https://sunnah.com/bukhari:6307'},
+{id:'b6405',topic:'فضل التسبيح',text:'مَنْ قَالَ سُبْحَانَ اللَّهِ وَبِحَمْدِهِ فِي يَوْمٍ مِائَةَ مَرَّةٍ، حُطَّتْ خَطَايَاهُ، وَإِنْ كَانَتْ مِثْلَ زَبَدِ الْبَحْرِ.',collection:'صحيح البخاري',reference:'6405',book:'كتاب الدعوات',url:'https://sunnah.com/bukhari:6405'},
+{id:'b1',topic:'إخلاص النيّة',text:'إِنَّمَا الْأَعْمَالُ بِالنِّيَّاتِ، وَإِنَّمَا لِكُلِّ امْرِئٍ مَا نَوَى.',collection:'صحيح البخاري',reference:'1',book:'كتاب بدء الوحي',url:'https://sunnah.com/bukhari:1',excerpt:true},
+{id:'m2626',topic:'الخير وحُسن اللقاء',text:'لَا تَحْقِرَنَّ مِنَ الْمَعْرُوفِ شَيْئًا، وَلَوْ أَنْ تَلْقَى أَخَاكَ بِوَجْهٍ طَلْقٍ.',collection:'صحيح مسلم',reference:'2626',book:'كتاب البر والصلة والآداب',url:'https://sunnah.com/muslim:2626'},
+{id:'m2593',topic:'الرفق في التعليم والتعامل',text:'يَا عَائِشَةُ إِنَّ اللَّهَ رَفِيقٌ يُحِبُّ الرِّفْقَ، وَيُعْطِي عَلَى الرِّفْقِ مَا لَا يُعْطِي عَلَى الْعُنْفِ، وَمَا لَا يُعْطِي عَلَى مَا سِوَاهُ.',collection:'صحيح مسلم',reference:'2593',book:'كتاب البر والصلة والآداب',url:'https://sunnah.com/muslim:2593'},
+{id:'b6018',topic:'الكلمة الطيّبة',text:'وَمَنْ كَانَ يُؤْمِنُ بِاللَّهِ وَالْيَوْمِ الْآخِرِ فَلْيَقُلْ خَيْرًا أَوْ لِيَصْمُتْ.',collection:'صحيح البخاري',reference:'6018',book:'كتاب الأدب',url:'https://sunnah.com/bukhari:6018',excerpt:true},
+{id:'b6464',topic:'المداومة على العمل الصالح',text:'سَدِّدُوا وَقَارِبُوا، وَاعْلَمُوا أَنْ لَنْ يُدْخِلَ أَحَدَكُمْ عَمَلُهُ الْجَنَّةَ، وَأَنَّ أَحَبَّ الْأَعْمَالِ أَدْوَمُهَا إِلَى اللَّهِ، وَإِنْ قَلَّ.',collection:'صحيح البخاري',reference:'6464',book:'كتاب الرقاق',url:'https://sunnah.com/bukhari:6464'},
+{id:'b6406',topic:'ذكرٌ خفيف وأجرٌ عظيم',text:'كَلِمَتَانِ خَفِيفَتَانِ عَلَى اللِّسَانِ، ثَقِيلَتَانِ فِي الْمِيزَانِ، حَبِيبَتَانِ إِلَى الرَّحْمَنِ، سُبْحَانَ اللَّهِ الْعَظِيمِ، سُبْحَانَ اللَّهِ وَبِحَمْدِهِ.',collection:'صحيح البخاري',reference:'6406',book:'كتاب الدعوات',url:'https://sunnah.com/bukhari:6406'}
+];
+export function dailyHadith(day:string){const n=Math.floor(Date.parse(day+'T12:00:00Z')/86400000);return HADITHS[((n%HADITHS.length)+HADITHS.length)%HADITHS.length];}

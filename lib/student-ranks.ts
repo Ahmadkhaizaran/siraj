@@ -1,0 +1,4 @@
+export const RANKS=[{name:'مبتدئ',icon:'🌱',color:'#426b53'},{name:'مثابر',icon:'🌿',color:'#28725e'},{name:'متمرس',icon:'🛡️',color:'#2e6893'},{name:'بارع',icon:'⭐',color:'#72529c'},{name:'خبير',icon:'💎',color:'#276e86'},{name:'محترف',icon:'🏅',color:'#97562e'},{name:'رائد',icon:'👑',color:'#927018'}] as const;
+export const MARKS=[['attendance','الحضور',3],['quran','القرآن',7],['religion','درس الدين',5],['conduct','الأخلاق',5],['activity','النشاط',5]] as const;
+export function earnedPoints(values:Record<string,number>){const sum=MARKS.reduce((n,[key])=>n+values[key],0);return sum+(MARKS.every(([key,maxLabel,max])=>values[key]===max)?5:0)}
+export function rankFor(points:number){const index=Math.min(6,Math.floor(Math.max(0,points)/35));return {...RANKS[index],index,threshold:index*35,remaining:index===6?0:(index+1)*35-points,progress:index===6?35:points-index*35}}
