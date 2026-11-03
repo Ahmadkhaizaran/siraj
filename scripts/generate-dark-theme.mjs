@@ -7,17 +7,23 @@ const source=postcss.parse(readFileSync('app/globals.css','utf8'));
 function rgb(hex){let s=hex.slice(1);if(s.length===3||s.length===4)s=[...s].map(c=>c+c).join('');return [parseInt(s.slice(0,2),16)/255,parseInt(s.slice(2,4),16)/255,parseInt(s.slice(4,6),16)/255,s.slice(6)]}
 function hsl([r,g,b]){const max=Math.max(r,g,b),min=Math.min(r,g,b),l=(max+min)/2,d=max-min;let h=0,s=0;if(d){s=d/(1-Math.abs(2*l-1));h=max===r?((g-b)/d)%6:max===g?(b-r)/d+2:(r-g)/d+4;h=(h*60+360)%360}return [h,s,l]}
 function hex(h,s,l,alpha=''){const c=(1-Math.abs(2*l-1))*s,x=c*(1-Math.abs((h/60)%2-1)),m=l-c/2;const [r,g,b]=h<60?[c,x,0]:h<120?[x,c,0]:h<180?[0,c,x]:h<240?[0,x,c]:h<300?[x,0,c]:[c,0,x];return '#'+[r,g,b].map(v=>Math.round((v+m)*255).toString(16).padStart(2,'0')).join('')+alpha}
-function color(value,role){const rgba=rgb(value),[h,s,l]=hsl(rgba);const hue=s<.07?145:h;
- if(role==='shadow')return '#000000'+(rgba[3]||'66');
- if(role==='text'){if(l>.9)return '#edf5ef'+rgba[3];return hex(hue,Math.min(s,.55),l<.5?.81:.72,rgba[3]);}
- if(role==='border')return hex(hue,Math.min(s,.35),l>.6?.26:Math.max(.34,l),rgba[3]);
- // Keep dark feature banners dark; convert pale cards to tinted dark surfaces.
- return hex(hue,Math.min(s,.43),l>.85?.13:l>.55?.2:Math.min(l,.3),rgba[3]);
+function color(value,role){const rgba=rgb(value),[h,s,l]=hsl(rgba);const hue=h>=70&&h<=180?160:h;
+ const alpha=rgba[3];
+ if(role==='shadow')return '#000000'+(alpha||'55');
+ if(role==='text'){
+  if(l>.86)return '#f1f6f4'+alpha;
+  if(s<.1)return (l<.5?'#dce6e4':'#afc0c0')+alpha;
+  return hex(hue,Math.min(s,.5),l<.5?.84:.75,alpha);
+ }
+ if(role==='border')return s<.2?'#34464b'+alpha:hex(hue,Math.min(s,.24),.29,alpha);
+ // Neutral surfaces provide depth; accents retain their semantic hue.
+ if(s<.15||l>.96)return (l>.96?'#182124':l>.85?'#202c30':'#293a3e')+alpha;
+ return hex(hue,Math.min(s,.25),l>.85?.16:l>.55?.22:Math.min(l,.25),alpha);
 }
 const dark=postcss.root();
-dark.append(postcss.parse(`html[data-theme="dark"]{color-scheme:dark;--green:#256b54;--green-dark:#2e7c63;--sage:#24382b;--gold:#ddc48a;--ink:#e1ede4;--muted:#a5b5aa;--line:#34483a;--bg:#101a15;--white:#1a2920}`));
+dark.append(postcss.parse(`html[data-theme="dark"]{color-scheme:dark;--green:#287a61;--green-dark:#309273;--sage:#233a34;--gold:#e5c891;--ink:#edf3f1;--muted:#afc0c0;--line:#34464b;--bg:#101719;--white:#182124}`));
 function transform(container,target){for(const node of container.nodes||[]){if(node.type==='rule'&&!node.selector.includes(':root')){const declarations=[];for(const d of node.nodes||[]){if(d.type!=='decl'||d.prop.startsWith('--')||!/(color|background|border|outline|shadow|fill|stroke)/.test(d.prop))continue;const role=d.prop.includes('shadow')?'shadow':d.prop==='color'||d.prop==='fill'||d.prop==='stroke'?'text':d.prop.includes('border')||d.prop.includes('outline')?'border':'background';let value=d.value.replace(/#[\da-f]{3,8}\b/gi,c=>color(c,role)).replace(/(?<![\w-])white\b/g,color('#ffffff',role)).replace(/(?<![\w-])black\b/g,color('#000000',role));if(value!==d.value)declarations.push(d.clone({value}));}if(declarations.length){const rule=postcss.rule({selector:node.selectors.map(s=>'html[data-theme="dark"] '+s).join(',')});declarations.forEach(d=>rule.append(d));target.append(rule);}}else if(node.type==='atrule'&&node.name==='media'){const nested=postcss.atRule({name:node.name,params:node.params});transform(node,nested);if(nested.nodes?.length)target.append(nested);}}}
 transform(source,dark);
-dark.append(postcss.parse(`html[data-theme="dark"] .brand,html[data-theme="dark"] .text-button,html[data-theme="dark"] .student-home-brand{color:#92d2af}html[data-theme="dark"] .auth-story .brand{color:#edf5ef}html[data-theme="dark"] .brand-mark,html[data-theme="dark"] .mosque-brand-mark{background:#f4f7ee;border-radius:10px}html[data-theme="dark"] .surah-tile.complete{background:#276e4c;color:#f4fff5}html[data-theme="dark"] .surah-tile.partial{border-color:#64bc87}html[data-theme="dark"] .quran-reader .learned{background:#254632}html[data-theme="dark"] .theme-switcher select option{background:#1b2b21;color:#e1ede4}html[data-theme="dark"] ::selection{background:#386a4f;color:#fff}`));
+dark.append(postcss.parse(`html[data-theme="dark"] .brand,html[data-theme="dark"] .text-button,html[data-theme="dark"] .student-home-brand{color:#91d7bb}html[data-theme="dark"] .auth-story .brand{color:#edf5ef}html[data-theme="dark"] .brand-mark,html[data-theme="dark"] .mosque-brand-mark{background:#f4f7ee;border-radius:10px}html[data-theme="dark"] .surah-tile.complete{background:#276e4c;color:#f4fff5}html[data-theme="dark"] .surah-tile.partial{border-color:#64bc87}html[data-theme="dark"] .quran-reader .learned{background:#254632}html[data-theme="dark"] .theme-switcher select option{background:#202c30;color:#edf3f1}html[data-theme="dark"] .theme-switcher{background:#202c30;color:#dce6e4;border-color:#40565b}html[data-theme="dark"] .theme-switcher>select,html[data-theme="dark"] .theme-switcher>select:focus{background:transparent;background-image:none;border:0;box-shadow:none;color:inherit}html[data-theme="dark"] .community-datebar{background:#141e21;color:#bac9c7}html[data-theme="dark"] .community-datebar svg{color:#91c6b1}html[data-theme="dark"] .community-datebar .clock-calculation{background:#293a3e;color:#d4dfdc}html[data-theme="dark"] .about-public{background:var(--bg)}html[data-theme="dark"] ::selection{background:#386a4f;color:#fff}`));
 writeFileSync('app/dark-theme.css','/* Generated by scripts/generate-dark-theme.mjs from globals.css. */\n'+dark.toString()+'\n');
 console.log('Generated dark colors for '+dark.nodes.length+' rules.');

@@ -6,7 +6,7 @@ function ThemeChrome(){
  useEffect(()=>{
   let meta=document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
   if(!meta){meta=document.createElement('meta');meta.name='theme-color';document.head.appendChild(meta)}
-  meta.content=resolvedTheme==='dark'?'#101a15':'#f7f8f5';
+  meta.content=resolvedTheme==='dark'?'#101719':'#f7f8f5';
  },[resolvedTheme]);
  return null;
 }

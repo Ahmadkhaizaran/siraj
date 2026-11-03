@@ -95,3 +95,14 @@
 .rank-period{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}.rank-period .field{margin:0}.achievement-tools{margin:24px 0;padding:22px;border:1px solid var(--line);border-radius:14px;background:var(--bg)}.achievement-preview{display:block;width:100%;height:auto;margin-top:18px;border-radius:8px}.achievement-tools .field{max-width:380px}.achievement-tools .heading-actions{flex-wrap:wrap}
 
 .platform-achievement-item{padding:22px 0;border-bottom:1px solid var(--line)}.platform-achievement-item textarea{max-width:850px}.platform-achievement-item .heading-actions{flex-wrap:wrap}
+
+/* Clock readability and a single, consistent native theme control. */
+.community-datebar{font-size:13px;row-gap:12px;padding-block:14px}
+.community-datebar .clock-period{font-size:20px;font-weight:700;line-height:1.6}
+.community-datebar .clock-city{display:inline-flex;align-items:center;gap:6px;font-size:15px;font-weight:600;color:var(--ink)}
+.community-datebar .clock-city svg{width:17px;height:17px;flex-shrink:0}
+.community-datebar .clock-calculation{font-size:12px;font-weight:600;padding:2px 8px;border-radius:6px;background:#eef2ec;color:#596d60}
+.theme-switcher{position:relative;min-height:42px;padding-inline:11px;gap:8px}
+.theme-switcher>select,.theme-switcher>select:focus{appearance:none;-webkit-appearance:none;background:transparent;background-image:none;border:0;border-radius:0;box-shadow:none;color:inherit;min-height:40px;width:90px;padding:6px 2px 6px 23px;font-size:13px;font-weight:600;cursor:pointer}
+.theme-switcher .theme-chevron{position:absolute;left:10px;pointer-events:none;width:14px;height:14px}
+@media(max-width:600px){.community-datebar{padding-inline:18px;column-gap:18px}.community-datebar .community-time{flex-wrap:wrap;gap:9px}.community-datebar .clock-period{font-size:18px}.community-datebar .clock-city{font-size:14px}.theme-switcher{min-height:40px}.theme-switcher>select{font-size:13px;min-height:38px;width:84px}}
