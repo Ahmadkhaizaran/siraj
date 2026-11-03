@@ -14,6 +14,7 @@ Implementation (2026-11-03):
 - Next.js serves the UI and proxies same-origin API requests to this backend. No SQL proxy or database credentials are exposed to clients.
 - Current source records were copied from the original Site via the authorized database viewer in one transaction. All 20 source tables were read without truncation. Identity sequences were restored. No source records were deleted.
 - Imported accounts have `migration:legacy-password:<id>` settings, allowing a one-time password verification with the original Site. A correct login rehashes the password using the new pepper and removes the marker. A changed hash disables the fallback. Keep the original Site available until migration markers are cleared or passwords are reset. This is not ongoing replication.
+- Legacy verification requires an explicit JSON `{ok:true}` response. HTML pages, ambiguous success bodies and upstream failures cannot authenticate an account. The upgrade checks the current hash and account state atomically, so a concurrent password reset cannot issue a session using the old password.
 - `lib/postgres-adapter.ts` implements prepared queries and atomic batches. The same 408 API checks pass on an isolated PostgreSQL engine and on D1.
 - Build the edge bundle with `SIRAJ_BACKEND_KEY_HASH` using `build-edge.mjs`. Deploy that bundle with its own API-key authentication (verify_jwt=false). Deploy the repository root on Vercel using `build:vercel`.
 

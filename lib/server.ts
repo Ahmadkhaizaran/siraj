@@ -100,9 +100,16 @@ export async function handle(req:Request,runtime?:SirajRuntime){
      const legacy=new URL('/api/auth/login',env.SIRAJ_LEGACY_AUTH_URL);
      try{
       const response=await fetch(legacy,{method:'POST',headers:{'Content-Type':'application/json','Origin':legacy.origin},body:JSON.stringify({username:login,password:pw}),redirect:'error',signal:AbortSignal.timeout(12000)});
-      if(response.status===200){
-       await db.batch([q('UPDATE users SET password_hash=? WHERE id=? AND password_hash=?',await hashPassword(pw,pepper()),u.id,u.password_hash),q('DELETE FROM settings WHERE key=?','migration:legacy-password:'+u.id)]);
-       valid=true;
+      if(response.status!==401){
+       if(response.status!==200||response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()!=='application/json')fail(503,'تعذّر التحقق من الحساب المنقول. حاول مجددًا بعد قليل.');
+       const confirmation:unknown=await response.json();
+       if(!confirmation||typeof confirmation!=='object'||Array.isArray(confirmation)||(confirmation as {ok?:unknown}).ok!==true)fail(503,'تعذّر التحقق من الحساب المنقول. حاول مجددًا بعد قليل.');
+       const upgradedHash=await hashPassword(pw,pepper());
+       const [upgrade]=await db.batch([
+        q('UPDATE users SET password_hash=? WHERE id=? AND password_hash=? AND active=1 AND cancelled_at IS NULL',upgradedHash,u.id,u.password_hash),
+        q('DELETE FROM settings WHERE key=? AND value=? AND EXISTS (SELECT 1 FROM users WHERE id=? AND password_hash=?)','migration:legacy-password:'+u.id,u.password_hash,u.id,upgradedHash),
+       ]);
+       valid=Number(upgrade.meta.changes)===1;
       }
      }catch{fail(503,'تعذّر التحقق من الحساب المنقول. حاول مجددًا بعد قليل.');}
     }
