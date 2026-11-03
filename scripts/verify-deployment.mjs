@@ -16,7 +16,14 @@ const checks=[
   assert.match(await r.text(),/سِ?راج/);
  }],
  ['about',async()=>{assert.equal((await get('/about')).status,200);}],
- ['calendar',async()=>{assert.equal((await get('/calendar')).status,200);}],
+ ['calendar',async()=>{
+  const r=await fetch(new URL('/calendar',base),{redirect:'manual',signal:AbortSignal.timeout(25000)});
+  assert.ok([307,308].includes(r.status),'Calendar should route into the main application');
+  const location=r.headers.get('location');assert.ok(location);
+  const target=new URL(location,base);assert.equal(target.origin,base.origin);
+  assert.equal(target.pathname,'/');assert.equal(target.searchParams.get('view'),'calendar');
+  assert.equal((await get(target.pathname+target.search)).status,200);
+ }],
  ['database connection and anonymous session',async()=>{
   const r=await get('/api/auth/status');assert.equal(r.status,200);assert.match(r.headers.get('cache-control')||'',/no-store/);
   const status=await r.json();assert.equal(status.initialized,true);assert.equal(status.user,null);
