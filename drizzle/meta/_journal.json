@@ -64,6 +64,20 @@
       "when": 1793705273717,
       "tag": "0008_demonic_ultragirl",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793741261408,
+      "tag": "0009_tired_millenium_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793741899062,
+      "tag": "0010_broad_solo",
+      "breakpoints": true
     }
   ]
 }

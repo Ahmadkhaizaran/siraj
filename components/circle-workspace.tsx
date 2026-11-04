@@ -1,0 +1,50 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import {BookOpen,ArrowRight,CalendarDays,Check,Plus,Settings,Users,LoaderCircle} from 'lucide-react';
+import {addDays,beirutDay} from '../lib/islamic-calendar';
+import {MARKS,earnedPoints} from '../lib/student-ranks';
+type Row=Record<string,any>;
+const empty=()=>({status:'',quran:0,religion:0,conduct:0,activity:0,notes:''});
+const statusNames:Record<string,string>={present:'حاضر',late:'متأخر',absent:'غائب',excused:'بعذر'};
+async function request(path:string,body?:Row){
+ const r=await fetch('/api/'+path,{method:body?'POST':'GET',cache:'no-store',credentials:'same-origin',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
+ const d:any=await r.json();if(!r.ok)throw Error(d.error||'تعذّر تحميل اللقاء');return d;
+}
+export default function CircleWorkspace({data,mineOnly=false,onCreate,onEdit,onSaved}:{data:Row;mineOnly?:boolean;onCreate?:()=>void;onEdit?:(circle:Row)=>void;onSaved?:()=>void}){
+ const [selected,setSelected]=useState(''),[day,setDay]=useState(beirutDay),[session,setSession]=useState<Row|null>(null),[drafts,setDrafts]=useState<Record<string,Row>>({}),[members,setMembers]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const circles:Row[]=(data.circles||[]).filter((c:Row)=>!mineOnly||c.teacher_id===data.user.id);
+ const circle=circles.find(c=>c.id===selected),mid=data.mosque_id;
+ const active=useRef('');active.current=selected+'|'+day;
+ const url='circle-session?mosque='+encodeURIComponent(mid)+'&circle_id='+encodeURIComponent(selected)+'&date='+day;
+ function apply(d:Row){setSession(d);setDrafts(Object.fromEntries(d.students.map((s:Row)=>[s.id,{...empty(),...(s.record||{})}])));setMembers(d.member_ids)}
+ async function reload(){const key=selected+'|'+day,d=await request(url);if(active.current===key)apply(d)}
+ useEffect(()=>{
+  let live=true;setSession(null);setError('');setNotice('');
+  if(selected&&circle)request(url).then(d=>{if(live)apply(d)}).catch(e=>{if(live)setError(e.message)});
+  return()=>{live=false};
+ },[url,selected,!!circle]);
+ function change(sid:string,key:string,value:any){setDrafts(all=>{const next={...empty(),...all[sid],[key]:value};if(key==='status'&&['absent','excused'].includes(value))for(const [mark] of MARKS)if(mark!=='attendance')(next as Row)[mark]=0;return {...all,[sid]:next}});setNotice('')}
+ async function save(){
+  if(!session)return;setBusy(true);setError('');setNotice('');
+  try{const records=session.students.map((s:Row)=>({student_id:s.id,...drafts[s.id]})).filter((r:Row)=>r.status);
+   if(!records.length)throw Error('حدّد حالة الحضور لطالب واحد على الأقل');
+   await request('circle-session',{mosque_id:mid,circle_id:selected,date:day,revision:session.revision,records});
+   await reload();setNotice('حُفظ حضور اللقاء وعلاماته في سجلات الطلاب. تعديل نفس اللقاء يصحّح النقاط ولا يكرّرها.');onSaved?.();
+  }catch(e){setError((e as Error).message)}finally{setBusy(false)}
+ }
+ async function saveMembers(){setBusy(true);setError('');setNotice('');try{await request('circle-enrollments',{mosque_id:mid,circle_id:selected,student_ids:members});await reload();setNotice('حُفظ توزيع طلاب الحلقة');onSaved?.()}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
+ if(!circle)return <section className="circle-workspace"><div className="page-heading"><div><span className="eyebrow">المساحة التعليمية</span><h1>{mineOnly?'حلقاتي':'الحلقات ولقاءاتها'}</h1><p>{mineOnly?'الحلقات المسندة إليك للتعليم، مهما كانت صفتك الإدارية.':'حلقات الجهة؛ افتح الحلقة للاطلاع على طلابها ولقاءاتها اليومية.'}</p></div>{onCreate&&<button className="btn primary" onClick={onCreate}><Plus size={17}/>إضافة حلقة</button>}</div><div className="cards-grid">{circles.map(c=><article className="panel circle-session-card" key={c.id}><BookOpen size={26}/><h2>{c.name}</h2><p>{c.teacher_name||'لم يُعيّن المدرّس'}</p><p>{c.level}{c.schedule?' · '+c.schedule:''}</p><small>{data.students.filter((s:Row)=>s.status==='active'&&(s.circle_id===c.id||s.circle_ids?.includes(c.id))).length} طالب منتظم</small><footer><button className="btn primary" onClick={()=>{setSelected(c.id);setDay(beirutDay())}}>طلاب الحلقة ولقاء اليوم</button>{onEdit&&<button className="icon-btn" aria-label={'إعدادات '+c.name} onClick={()=>onEdit(c)}><Settings size={18}/></button>}</footer></article>)}</div>{!circles.length&&<div className="panel empty"><BookOpen size={28}/><h2>{mineOnly?'لا توجد حلقات مسندة إليك بعد':'لم تُضف حلقات بعد'}</h2><p>{mineOnly?'يستطيع المشرف الأساسي إسناد حلقة إلى المدرّس أو المشرف أو إلى نفسه.':'ابدأ بإنشاء الحلقة وتعيين المسؤول عنها.'}</p></div>}</section>;
+ const future=day>beirutDay(),editable=!!session?.can_record&&!busy;
+ const title=new Date(day+'T12:00:00').toLocaleDateString('ar-LB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+ return <section className="circle-workspace"><button className="text-button" disabled={busy} onClick={()=>setSelected('')}><ArrowRight size={17}/>العودة إلى {mineOnly?'حلقاتي':'الحلقات'}</button><div className="page-heading"><div><span className="eyebrow">{circle.teacher_name||'لم يُعيّن المدرّس'}</span><h1>{circle.name}</h1><p>لقاء {title} · بتوقيت لبنان</p></div></div><div className="panel encounter-toolbar"><label className="field"><span><CalendarDays size={16}/> تاريخ اللقاء</span><input type="date" value={day} disabled={busy} onChange={e=>{if(e.target.value)setDay(e.target.value)}}/></label><button className="btn secondary" disabled={busy} onClick={()=>setDay(beirutDay())}>لقاء اليوم</button><button className="btn secondary" disabled={busy} onClick={()=>setDay(addDays(beirutDay(),1))}>اللقاء القادم · غدًا</button></div>
+ {future&&<p className="info-strip">لقاء قادم: يمكنك مراجعة قائمة الطلاب الآن، وتسجيل الحضور والعلامات في يوم اللقاء.</p>}
+ {!future&&session&&!session.can_record&&<p className="info-strip">هذا السجل للعرض. يعتمد حضور الحلقة وعلاماتها الشخص المسندة إليه.</p>}
+ {error&&<p className="error" role="alert">{error}</p>}{notice&&<p className="learning-notice" role="status">{notice}</p>}
+ {!session?<div className="panel empty"><p role="status">{error?'تعذّر تحميل سجل اللقاء':'جارٍ تحميل طلاب الحلقة…'}</p><button className="btn secondary" onClick={()=>reload().catch(e=>setError(e.message))}>إعادة التحميل</button></div>:<>
+ <div className="encounter-students">{session.students.map((s:Row)=>{const d=drafts[s.id]||empty(),attending=['present','late'].includes(d.status),attendance=d.status==='present'?3:d.status==='late'?2:0,points=earnedPoints({...d,attendance});return <article className="panel encounter-student" key={s.id}><header><label className="encounter-check"><input type="checkbox" aria-label={'حاضر: '+s.name} checked={d.status==='present'} disabled={!editable} onChange={e=>change(s.id,'status',e.target.checked?'present':'absent')}/><span><strong>{s.name}</strong><small><bdi>{s.student_code}</bdi>{s.student_status!=='active'?' · سجل سابق':''}</small></span></label><label className="field"><span>حالة الحضور</span><select aria-label={'حالة حضور '+s.name} value={d.status} disabled={!editable} onChange={e=>change(s.id,'status',e.target.value)}><option value="" disabled={!!s.record}>لم يُسجّل بعد</option>{Object.entries(statusNames).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><strong className="encounter-points">{d.status?points:'—'} <small>نقطة لهذا اللقاء</small></strong></header><details><summary>علامات اللقاء وملاحظاته</summary><p>الحضور محسوب تلقائيًا: حاضر ٣، متأخر ٢، غائب أو بعذر ٠. العلامات تخص هذا اللقاء فقط.</p><div className="rank-mark-grid"><div className="field"><span>الحضور / ٣</span><strong>{attendance}</strong></div>{MARKS.filter(([key])=>key!=='attendance').map(([key,label,max])=><label className="field" key={key}><span>{label} / {max}</span><input type="number" min={0} max={max} step={1} required disabled={!editable||!attending} value={d[key]} onChange={e=>change(s.id,key,Number(e.target.value))}/></label>)}</div><label className="field"><span>ملاحظات هذا اللقاء</span><textarea maxLength={1000} disabled={!editable} value={d.notes} onChange={e=>change(s.id,'notes',e.target.value)}/></label></details></article>})}</div>
+ {!session.students.length&&<div className="panel empty"><Users size={28}/><h2>لا يوجد طلاب في قائمة الحلقة</h2><p>أضف الطلاب من توزيع الحلقة أو اطلب ذلك من المشرف الأساسي.</p></div>}
+ {session.can_record&&<div className="encounter-save"><p>حتى ٣٠ نقطة للطالب في اللقاء الواحد. تحفظ كل حلقة نقاطها مرة واحدة في اليوم، وتتجمع في سجل الطالب عبر اللقاءات.</p><button className="btn primary" disabled={busy||!session.students.length} onClick={save}>{busy?<LoaderCircle size={17} className="spin"/>:<Check size={17}/>}اعتماد حضور اللقاء وعلاماته</button></div>}
+ {session.can_enroll&&<details className="panel encounter-enrollment"><summary>توزيع طلاب الحلقة</summary><p>يمكن تسجيل الطالب في أكثر من حلقة، وتبقى جميع لقاءاته في سجله. إزالته من هذه القائمة لا تمحو سجله السابق.</p><div className="encounter-member-list">{data.students.filter((s:Row)=>s.status==='active').map((s:Row)=><label key={s.id}><input type="checkbox" disabled={busy} checked={members.includes(s.id)} onChange={e=>setMembers(a=>e.target.checked?[...a,s.id]:a.filter(id=>id!==s.id))}/>{s.name}<small><bdi>{s.student_code}</bdi></small></label>)}</div><button className="btn secondary" disabled={busy} onClick={saveMembers}>حفظ طلاب الحلقة</button></details>}
+ <details className="panel encounter-history"><summary>لقاءات الحلقة السابقة ({session.encounters.length})</summary><div>{session.encounters.map((e:Row)=><button className="btn secondary" key={e.day} disabled={busy} onClick={()=>setDay(e.day)}>{new Date(e.day+'T12:00:00').toLocaleDateString('ar-LB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})} · {e.students_count} طالب</button>)}</div></details>
+ </>}</section>;
+}

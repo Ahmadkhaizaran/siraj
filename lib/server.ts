@@ -1,10 +1,11 @@
+import {circleSession} from './circle-sessions';
 import { defaultRuntime, type SirajRuntime } from './server-runtime';
 import { digest, equal, hashPassword, verifyPassword, token } from './auth-crypto';
 import { communityFeed } from './community-server';
 import { beirutDay } from './islamic-calendar';
 import { SURAHS, normalizeRanges } from './quran';
 import {notificationSince} from './notification-policy';
-import {MARKS,earnedPoints,rankFor} from './student-ranks';
+import {rankFor} from './student-ranks';
 import { ENTITY_KINDS } from './entity-kinds';
 type Row = Record<string, any>;
 type User = {id:string;mosque_id:string|null;name:string;username:string;role:string;active:number;student_id:string|null;created_at:string};
@@ -125,11 +126,11 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   const isOwner=user.role==='admin',isAdmin=['admin','platform_supervisor'].includes(user.role),manager=isAdmin||user.role==='primary',isTeacher=user.role==='teacher',isStudent=user.role==='student';
   if(isStudent&&path==='export')fail(403,'تصدير بيانات الجهة متاح لإدارتها فقط');
   if(isStudent&&write&&!['auth/password','calendar/seen'].includes(path))fail(403,'حساب الطالب للعرض فقط');
-  if(isAdmin&&['students','circles','attendance','progress','export','student-profile','memorization','assessments','student-account','motivation'].includes(path))fail(403,'المتابعة التعليمية من صلاحيات إدارة المسجد أو المركز ومدرّسيه');
+  if(isAdmin&&['students','circles','attendance','progress','export','student-profile','memorization','assessments','student-account','motivation','circle-session','circle-enrollments'].includes(path))fail(403,'المتابعة التعليمية من صلاحيات إدارة المسجد أو المركز ومدرّسيه');
   const scope=(mosque:unknown)=>{const mid=text(mosque,'المسجد',80);if(!isAdmin&&mid!==user.mosque_id)fail(403,'ليس لديك صلاحية الوصول إلى هذا المسجد أو المركز');return mid;};
   const mosqueExists=async(mid:string)=>{if(!await one('SELECT id FROM mosques WHERE id=? AND cancelled_at IS NULL',mid))fail(404,'المسجد أو المركز غير موجود');};
   const circleAccess=async(cid:string,mid:string)=>{const c=await one("SELECT * FROM circles WHERE id=? AND mosque_id=? AND status='active'",cid,mid);if(!c)fail(404,'الحلقة غير موجودة في هذا المسجد أو المركز');if(isTeacher&&c!.teacher_id!==user.id)fail(403,'هذه الحلقة غير مسندة إليك');return c!;};
-  const studentAccess=async(sid:string,mid:string)=>{if(isStudent&&sid!==user.student_id)fail(403,'يمكنك عرض ملفّك فقط');const s=await one("SELECT * FROM students WHERE id=? AND mosque_id=? AND status!='deleted'",sid,mid);if(!s)fail(404,'الطالب غير موجود في هذا المسجد أو المركز');if(isTeacher){if(!s!.circle_id)fail(403,'الطالب غير مسند إلى حلقتك');await circleAccess(s!.circle_id,mid);}return s!;};
+  const studentAccess=async(sid:string,mid:string)=>{if(isStudent&&sid!==user.student_id)fail(403,'يمكنك عرض ملفّك فقط');const s=await one("SELECT * FROM students WHERE id=? AND mosque_id=? AND status!='deleted'",sid,mid);if(!s)fail(404,'الطالب غير موجود في هذا المسجد أو المركز');if(isTeacher&&!await one("SELECT c.id FROM circles c WHERE c.mosque_id=? AND c.teacher_id=? AND c.status='active' AND (c.id=? OR EXISTS (SELECT 1 FROM circle_enrollments ce WHERE ce.circle_id=c.id AND ce.student_id=?))",mid,user.id,s!.circle_id,sid))fail(403,'الطالب غير مسند إلى حلقتك');return s!;};
   const audit=(mid:string|null,message:string)=>q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',id(),mid,user.id,message,now());
   const params=new URL(req.url).searchParams;
   if(path==='platform-users'&&['POST','PATCH'].includes(method)){
@@ -179,7 +180,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    if(!isAdmin)fail(403,'هذه المساحة لإدارة المنصّة');
    const mid=scope(params.get('mosque'));await mosqueExists(mid);
    const mosque=await one('SELECT * FROM mosques WHERE id=?',mid);
-   const team=await rows("SELECT id,name,username,role,phone,active,created_at FROM users WHERE mosque_id=? AND cancelled_at IS NULL AND role!='student' ORDER BY created_at",mid);
+   const team=await rows("SELECT id,name,english_name,username,role,phone,active,created_at FROM users WHERE mosque_id=? AND cancelled_at IS NULL AND role!='student' ORDER BY created_at",mid);
    const last=await one('SELECT MAX(created_at) AS at FROM activity WHERE mosque_id=?',mid);
    return json({mosque,team,last_activity_at:last?.at||null,checks:{primary_assigned:team.some(t=>t.role==='primary'&&t.active),active_team:team.filter(t=>t.active).length,contact_available:team.some(t=>t.role==='primary'&&t.active&&t.phone)}});
   }
@@ -228,7 +229,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const mid=isAdmin?(requested?scope(requested):null):scope(requested||user.mosque_id);if(mid)await mosqueExists(mid);
    const day=date(params.get('date')||new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Beirut'}));
    if(isAdmin){
-    const accounts=await rows("SELECT u.id,u.name,u.username,u.role,u.phone,u.active,u.mosque_id,u.created_at,m.name AS mosque_name FROM users u LEFT JOIN mosques m ON m.id=u.mosque_id WHERE u.role!='student' AND u.cancelled_at IS NULL AND (u.mosque_id IS NULL OR m.cancelled_at IS NULL) ORDER BY u.created_at,u.id");
+    const accounts=await rows("SELECT u.id,u.name,u.english_name,u.username,u.role,u.phone,u.active,u.mosque_id,u.created_at,m.name AS mosque_name FROM users u LEFT JOIN mosques m ON m.id=u.mosque_id WHERE u.role!='student' AND u.cancelled_at IS NULL AND (u.mosque_id IS NULL OR m.cancelled_at IS NULL) ORDER BY u.created_at,u.id");
     const cancelled_mosques=await rows('SELECT id,name,kind,cancelled_at FROM mosques WHERE cancelled_at IS NOT NULL ORDER BY cancelled_at DESC');
     const cancelled_accounts=await rows("SELECT u.id,u.name,u.role,u.mosque_id,m.name AS mosque_name,u.cancelled_at FROM users u JOIN mosques m ON m.id=u.mosque_id WHERE u.cancelled_at IS NOT NULL AND m.cancelled_at IS NULL AND u.role!='student' ORDER BY u.cancelled_at DESC");
     return json({user,mosques,cancelled_mosques,cancelled_accounts,mosque_id:mid,accounts,circles:[],students:[],attendance:[],progress:[],staff:[],activity:[],date:day});
@@ -245,15 +246,18 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    await q("UPDATE students SET status='active' WHERE mosque_id=? AND status='graduated'",mid).run();
    // Populate permanent numbers for existing students without changing applied migrations.
    await q('INSERT OR IGNORE INTO student_codes (student_id) SELECT s.id FROM students s WHERE s.mosque_id=? AND NOT EXISTS (SELECT 1 FROM student_codes n WHERE n.student_id=s.id)',mid).run();
-   const studentSql=isTeacher?" AND s.circle_id IN (SELECT id FROM circles WHERE mosque_id=? AND teacher_id=? AND status='active')":'';
+   const studentSql=isTeacher?" AND EXISTS (SELECT 1 FROM circles tc WHERE tc.mosque_id=? AND tc.teacher_id=? AND tc.status='active' AND (tc.id=s.circle_id OR EXISTS (SELECT 1 FROM circle_enrollments ce WHERE ce.circle_id=tc.id AND ce.student_id=s.id)))":'';
    const sargs=isTeacher?[mid,mid,user.id]:[mid];
-   const ss=(await rows("SELECT s.*,c.name AS circle_name,t.name AS teacher_name,t.phone AS teacher_phone,'SRG-'||n.number AS student_code FROM students s LEFT JOIN circles c ON c.id=s.circle_id LEFT JOIN users t ON t.id=c.teacher_id JOIN student_codes n ON n.student_id=s.id WHERE s.mosque_id=? AND s.status!='deleted'"+studentSql+' ORDER BY s.created_at DESC',...sargs)).map(s=>({...s,joined_on:s.joined_on||beirutDay(new Date(s.created_at))}));
+   const memberships=await rows("SELECT ce.circle_id,ce.student_id FROM circle_enrollments ce JOIN circles c ON c.id=ce.circle_id WHERE c.mosque_id=? AND c.status='active'",mid);
+   const ss=(await rows("SELECT s.*,c.name AS circle_name,t.name AS teacher_name,t.phone AS teacher_phone,'SRG-'||n.number AS student_code FROM students s LEFT JOIN circles c ON c.id=s.circle_id LEFT JOIN users t ON t.id=c.teacher_id JOIN student_codes n ON n.student_id=s.id WHERE s.mosque_id=? AND s.status!='deleted'"+studentSql+' ORDER BY s.created_at DESC',...sargs)).map(s=>({...s,circle_ids:[...new Set([s.circle_id,...memberships.filter(e=>e.student_id===s.id).map(e=>e.circle_id)].filter(Boolean))],joined_on:s.joined_on||beirutDay(new Date(s.created_at))}));
    const visible=isTeacher?" AND student_id IN (SELECT s.id FROM students s JOIN circles c ON c.id=s.circle_id WHERE s.mosque_id=? AND c.teacher_id=? AND s.status!='deleted' AND c.status='active')":" AND student_id IN (SELECT id FROM students WHERE status!='deleted')";
    const vargs=isTeacher?[mid,mid,user.id]:[mid];
    const all=path==='export';
    const att=await rows('SELECT * FROM attendance WHERE mosque_id=?'+visible+(all?'':' AND day>=date(?,\'-45 days\')'),...vargs,...(all?[]:[day]));
+   const circleAttendance=await rows("SELECT cr.session_id||':'||cr.student_id AS id,c.mosque_id,cr.student_id,cs.day,cr.status,cr.updated_by AS created_by,c.id AS circle_id,c.name AS circle_name FROM circle_records cr JOIN circle_sessions cs ON cs.id=cr.session_id JOIN circles c ON c.id=cs.circle_id JOIN students s ON s.id=cr.student_id WHERE c.mosque_id=? AND s.status!='deleted'"+(isTeacher?" AND c.teacher_id=? AND c.status='active'":'')+(all?'':" AND cs.day>=date(?,'-45 days')"),mid,...(isTeacher?[user.id]:[]),...(all?[]:[day]));
+   att.push(...circleAttendance);
    const ps=await rows("SELECT p.*,s.name AS student_name,u.name AS teacher_name FROM progress p JOIN students s ON s.id=p.student_id LEFT JOIN users u ON u.id=p.created_by WHERE p.mosque_id=? AND s.status!='deleted'"+(isTeacher?" AND p.student_id IN (SELECT s.id FROM students s JOIN circles c ON c.id=s.circle_id WHERE s.mosque_id=? AND c.teacher_id=? AND c.status='active')":'')+' ORDER BY p.day DESC,p.created_at DESC'+(all?'':' LIMIT 150'),...vargs);
-   const staff=isTeacher?await rows('SELECT id,name,role,phone,active,mosque_id FROM users WHERE id=?',user.id):await rows("SELECT id,name,username,role,phone,student_id,active,mosque_id,created_at FROM users WHERE mosque_id=? AND cancelled_at IS NULL AND role!='student' ORDER BY created_at",mid);
+   const staff=isTeacher?await rows('SELECT id,name,role,phone,active,mosque_id FROM users WHERE id=?',user.id):await rows("SELECT id,name,english_name,username,role,phone,student_id,active,mosque_id,created_at FROM users WHERE mosque_id=? AND cancelled_at IS NULL AND role!='student' ORDER BY created_at",mid);
    const act:Row[]=[]; // Staff membership and administrative activity are never exposed to institution users.
    return json({user,mosques,mosque_id:mid,circles:cs,students:ss,attendance:att,progress:ps,staff,activity:act,date:day,exported_at:all?now():undefined});
   }
@@ -282,20 +286,36 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const mid=scope(body.mosque_id);await mosqueExists(mid);
    const role=text(body.role,'الصلاحية',30);
    if(!['primary','supervisor','teacher'].includes(role))fail(403,'لا يمكنك منح هذه الصلاحية');
-   const name=text(body.name,'الاسم'),login=username(body.username);if(/^srg-\d+$/.test(login))fail(400,'هذه الصيغة محجوزة لأكواد الطلاب');const phone=text(body.phone,'رقم الهاتف',60,false);
+   const name=text(body.name,'الاسم');
+   const automatic=method==='POST'&&(body.auto_credentials===true||!body.username||!body.password);
+   let login=automatic?'':username(body.username);
+   if(/^srg-\d+$/.test(login))fail(400,'هذه الصيغة محجوزة لأكواد الطلاب');
+   const phone=text(body.phone,'رقم الهاتف',60,automatic);
    if(method==='POST'){
-    const uid=id(),hashed=await hashPassword(password(body.password),pepper());
-    await db.batch([q('INSERT INTO users (id,mosque_id,name,username,password_hash,role,phone,active,created_at) VALUES (?,?,?,?,?,?,?,1,?)',uid,mid,name,login,hashed,role,phone,now()),audit(mid,'أُضيف حساب '+name)]);return json({ok:true,id:uid},201);
+    const englishName=text(body.english_name,'الاسم بالإنجليزي',120,automatic);
+    if(englishName&&!/^[A-Za-z][A-Za-z .'-]{1,119}$/.test(englishName))fail(400,'اكتب الاسم بالإنجليزي');
+    const secret=automatic?token().slice(0,24):password(body.password);
+    if(automatic){
+     const base='edu.'+englishName.toLowerCase().replace(/[^a-z0-9]+/g,'.').replace(/^\.|\.$/g,'').slice(0,25).replace(/\.$/,'');
+     for(let attempt=0;attempt<5;attempt++){login=base+'.'+token().slice(0,8);if(!await one('SELECT id FROM users WHERE username=?',login))break;login='';}
+     if(!login)fail(503,'تعذّر توليد اسم الدخول، حاول مجددًا');
+    }
+    const uid=id(),hashed=await hashPassword(secret,pepper());
+    await db.batch([q('INSERT INTO users (id,mosque_id,name,english_name,username,password_hash,role,phone,active,created_at) VALUES (?,?,?,?,?,?,?,?,1,?)',uid,mid,name,englishName,login,hashed,role,phone,now()),audit(mid,'أُضيف حساب '+name)]);
+    return json({ok:true,id:uid,...(automatic?{credentials:{username:login,password:secret}}:{})},201);
    }
    const target=await one('SELECT * FROM users WHERE id=? AND mosque_id=? AND cancelled_at IS NULL',text(body.id,'الحساب',80),mid);
    if(!target||['admin','platform_supervisor','student'].includes(target.role))fail(403,'لا يمكنك تعديل هذا الحساب');
    if(target.id===user.id)fail(400,'يمكن تغيير كلمة سرك من إعدادات حسابك');
    const active=body.active===0?0:1;
-   const statements=[q('UPDATE users SET name=?,username=?,role=?,phone=?,active=? WHERE id=?',name,login,role,phone,active,target.id)];
+   const englishName=body.english_name==null?target.english_name||'':text(body.english_name,'الاسم بالإنجليزي',120,false);
+   if(englishName&&!/^[A-Za-z][A-Za-z .'-]{1,119}$/.test(englishName))fail(400,'اكتب الاسم بالإنجليزي');
+   const statements=[q('UPDATE users SET name=?,english_name=?,username=?,role=?,phone=?,active=? WHERE id=?',name,englishName,login,role,phone,active,target.id)];
    if(body.password)statements.push(q('UPDATE users SET password_hash=? WHERE id=?',await hashPassword(password(body.password),pepper()),target.id));
    statements.push(q('DELETE FROM sessions WHERE user_id=?',target.id),audit(mid,'حُدّث حساب '+name));
    await db.batch(statements);return json({ok:true});
   }
+  if(['circle-session','circle-enrollments'].includes(path))return await circleSession({db,user,body,params,method,path,scope,circleAccess,mosqueExists,text,date,fail,json});
   if(path==='circles'&&['POST','PATCH'].includes(method)){
    if(!manager)fail(403,'إدارة الحلقات وتعيين مدرّسيها من صلاحيات المشرف الأساسي');
    const mid=scope(body.mosque_id);await mosqueExists(mid);
@@ -319,9 +339,9 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    }
    if(method==='POST'&&isTeacher)fail(403,'إضافة الطلاب وتوزيعهم تتم عبر إدارة المسجد أو المركز');
    const cid=body.circle_id?text(body.circle_id,'الحلقة',80):null;
-   if(cid)await circleAccess(cid,mid);else if(isTeacher)fail(400,'اختر حلقة مسندة إليك');
    const sid=method==='POST'?id():text(body.id,'الطالب',80);
    const existing=method==='PATCH'?await studentAccess(sid,mid):null;
+   if(cid&&(!isTeacher||cid!==existing?.circle_id))await circleAccess(cid,mid);
    if(!manager&&cid!==(existing?.circle_id||null))fail(403,'توزيع الطلاب على الحلقات والمدرّسين من صلاحيات المشرف الأساسي');
    const name=text(body.name,'اسم الطالب'),contact=text(body.contact,'رقم التواصل',60,false),notes=text(body.notes,'الملاحظات',2000,false);
    const age=body.age==null||body.age===''?null:Number(body.age);if(age!==null&&(!Number.isInteger(age)||age<3||age>100))fail(400,'العمر يجب أن يكون بين 3 و100');
@@ -368,8 +388,8 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const before=params.get('before');if(before&&!/^[1-9]\d*$/.test(before))fail(400,'صفحة غير صالحة');
    const count=await one("SELECT COUNT(*) AS count FROM platform_achievements a JOIN students s ON s.id=a.student_id JOIN mosques m ON m.id=s.mosque_id WHERE a.seen_at IS NULL AND a.created_at>? AND s.status!='deleted' AND m.cancelled_at IS NULL",notificationSince(user.created_at));
    if(params.get('summary')==='1')return json({unread_count:count?.count||0});
-   const items=await rows("SELECT a.*,s.name AS student_name,m.name AS mosque_name,u.name AS reviewed_by,(SELECT COALESCE(SUM(points),0) FROM motivational_scores WHERE student_id=a.student_id) AS current_points,ms.conduct AS current_conduct,(ms.attendance+ms.quran+ms.religion+ms.conduct+ms.activity) AS current_score FROM platform_achievements a JOIN students s ON s.id=a.student_id JOIN mosques m ON m.id=s.mosque_id LEFT JOIN users u ON u.id=a.seen_by LEFT JOIN motivational_scores ms ON ms.student_id=a.student_id AND ms.day=a.day AND ms.meeting=a.meeting WHERE s.status!='deleted' AND m.cancelled_at IS NULL AND a.created_at>?"+(before?' AND a.number<?':'')+' ORDER BY a.number DESC LIMIT 51',notificationSince(user.created_at),...(before?[Number(before)]:[]));
-   return json({items:items.slice(0,50).map(a=>({...a,eligible:Number(a.current_points)>=a.rank*35&&Number(a.current_conduct)>=4&&Number(a.current_score)>=20,marks:JSON.parse(a.marks),rank:rankFor(a.rank*35)})),has_more:items.length>50,unread_count:count?.count||0});
+   const items=await rows("SELECT a.*,c.name AS encounter_circle_name,s.name AS student_name,m.name AS mosque_name,u.name AS reviewed_by,(SELECT COALESCE(SUM(points),0) FROM motivational_scores WHERE student_id=a.student_id) AS current_points,ms.conduct AS current_conduct,(ms.attendance+ms.quran+ms.religion+ms.conduct+ms.activity) AS current_score FROM platform_achievements a JOIN students s ON s.id=a.student_id JOIN mosques m ON m.id=s.mosque_id LEFT JOIN users u ON u.id=a.seen_by LEFT JOIN circles c ON a.meeting='circle:'||c.id LEFT JOIN motivational_scores ms ON ms.student_id=a.student_id AND ms.day=a.day AND ms.meeting=a.meeting WHERE s.status!='deleted' AND m.cancelled_at IS NULL AND a.created_at>?"+(before?' AND a.number<?':'')+' ORDER BY a.number DESC LIMIT 51',notificationSince(user.created_at),...(before?[Number(before)]:[]));
+   return json({items:items.slice(0,50).map(a=>({...a,meeting:a.encounter_circle_name?'لقاء '+a.encounter_circle_name:a.meeting,eligible:Number(a.current_points)>=a.rank*35&&Number(a.current_conduct)>=4&&Number(a.current_score)>=20,marks:JSON.parse(a.marks),rank:rankFor(a.rank*35)})),has_more:items.length>50,unread_count:count?.count||0});
   }
   if(path==='leaderboards'&&method==='GET'){
    const period=params.get('period')||'all',currentDay=beirutDay();let start='0001-01-01',end=currentDay;
@@ -393,19 +413,10 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   if(path==='motivation'&&['GET','POST'].includes(method)){
    const mid=scope(method==='GET'?params.get('mosque'):body.mosque_id),sid=text(method==='GET'?params.get('student_id'):body.student_id,'الطالب',80);await studentAccess(sid,mid);await mosqueExists(mid);
    if(method==='GET'){
-    const records=await rows('SELECT ms.*,u.name AS teacher_name FROM motivational_scores ms LEFT JOIN users u ON u.id=ms.updated_by WHERE ms.student_id=? ORDER BY ms.day DESC,ms.meeting',sid);
+    const records:Row[]=(await rows("SELECT ms.*,u.name AS teacher_name,cs.circle_id,c.name AS circle_name,cr.status AS attendance_status FROM motivational_scores ms LEFT JOIN users u ON u.id=ms.updated_by LEFT JOIN circle_sessions cs ON ms.meeting='circle:'||cs.circle_id AND ms.day=cs.day LEFT JOIN circle_records cr ON cr.session_id=cs.id AND cr.student_id=ms.student_id LEFT JOIN circles c ON c.id=cs.circle_id WHERE ms.student_id=? ORDER BY ms.day DESC,ms.meeting",sid)).map(r=>({...r,meeting:r.circle_name?'لقاء '+r.circle_name:r.meeting}));
     const points=records.reduce((n,r)=>n+Number(r.points),0);return json({records,points,rank:rankFor(points),student:await one('SELECT id,name FROM students WHERE id=?',sid),mosque:await one('SELECT name,logo FROM mosques WHERE id=?',mid)});
    }
-   const meeting=text(body.meeting??'اللقاء الأسبوعي','اسم اللقاء',100),day=date(body.date);if(day>beirutDay())fail(400,'لا يمكن تقييم يوم مستقبلي');
-   const values:Record<string,number>={};for(const [key,label,max] of MARKS){const value=body[key];if(!Number.isInteger(value)||value<0||value>max)fail(400,'تحقّق من علامة '+label);values[key]=value;}
-   if(!Number.isSafeInteger(body.revision)||body.revision<0)fail(400,'نسخة التقييم غير صالحة');
-   const prior=await one('SELECT revision,points FROM motivational_scores WHERE student_id=? AND day=? AND meeting=?',sid,day,meeting);
-   if((prior?.revision||0)!==body.revision)fail(409,'تغيّر التقييم؛ حدّث السجل قبل الحفظ');
-   const points=earnedPoints(values),notes=text(body.notes,'الملاحظات',1000,false),stamp=now();
-   const scoreWrite=q('INSERT INTO motivational_scores (student_id,day,meeting,attendance,quran,religion,conduct,activity,points,notes,revision,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?) ON CONFLICT(student_id,day,meeting) DO UPDATE SET attendance=excluded.attendance,quran=excluded.quran,religion=excluded.religion,conduct=excluded.conduct,activity=excluded.activity,points=excluded.points,notes=excluded.notes,revision=motivational_scores.revision+1,updated_by=excluded.updated_by,updated_at=excluded.updated_at WHERE motivational_scores.revision=?',sid,day,meeting,...MARKS.map(([key])=>values[key]),points,notes,user.id,stamp,body.revision);
-   const results=await db.batch([scoreWrite,q('INSERT OR IGNORE INTO platform_achievements (student_id,rank,points,marks,meeting,day,created_at) SELECT ?,MIN(6,CAST(SUM(points)/35 AS INTEGER)),SUM(points),?,?,?,? FROM motivational_scores WHERE student_id=? HAVING MIN(6,CAST(SUM(points)/35 AS INTEGER))>MIN(6,CAST((SUM(points)-?+?)/35 AS INTEGER)) AND ?>=20 AND ?>=4 AND EXISTS (SELECT 1 FROM motivational_scores WHERE student_id=? AND day=? AND meeting=? AND revision=? AND updated_by=? AND updated_at=?)',sid,JSON.stringify(values),meeting,day,stamp,sid,points,prior?.points||0,MARKS.reduce((n,[key])=>n+values[key],0),values.conduct,sid,day,meeting,body.revision+1,user.id,stamp)]);
-   if(!results[0].meta.changes)fail(409,'تغيّر التقييم؛ حدّث السجل قبل الحفظ');
-   await audit(mid,'سُجّل تقييم تحفيزي للطالب').run();return json({ok:true,points});
+   fail(400,'سجّل التقييم من لقاء الحلقة في قسم حلقاتي؛ ملف الطالب يعرض سجله فقط');
   }
   if(path==='student-profile'&&method==='GET'){
    const mid=scope(params.get('mosque')||user.mosque_id),sid=text(params.get('student_id'),'الطالب',80);await studentAccess(sid,mid);

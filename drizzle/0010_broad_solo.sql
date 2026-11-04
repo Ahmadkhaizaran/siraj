@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `english_name` text DEFAULT '' NOT NULL;

@@ -22,3 +22,6 @@ assert.equal(guide('التواصل مع صاحب المنصة','student').action
 assert.equal(guide('واتساب','teacher').actions[1].href,'https://wa.me/96181358618');
 assert.ok(!guide('كيف ألغي حساب','teacher').actions.some(a=>a.page==='team'));
 assert.ok(guide('دليل المنصة','student').actions.every(a=>['about','quran','calendar','learning','password'].includes(a.page)));
+
+assert.equal(guide('الحضور والغياب','teacher').actions[0].page,'my-circles');
+assert.match(guide('إضافة حساب لفريق التعليم','primary').text,/edu/);
