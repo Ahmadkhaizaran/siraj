@@ -403,7 +403,7 @@ await database.prepare('UPDATE support_messages SET created_at=? WHERE mosque_id
 assert.equal((await rankBoss('support/unread')).count,0);assert.equal((await rankBoss('support')).threads.find(t=>t.id===rankMid).unread_count,0);
 assert.ok((await rankBoss('support/messages?mosque='+rankMid)).messages.length>0);
 await database.prepare('UPDATE platform_achievements SET created_at=?').bind(oldTime).run();assert.equal((await admin('platform-achievements?summary=1')).unread_count,0);assert.equal((await admin('platform-achievements')).items.length,0);
-const oldEvent=(await rankBoss('calendar/events',{mosque_id:rankMid,title:'نشاط سابق لا يولّد تنبيهًا',date:'2026-11-04'},'POST',201)).id;
+const oldEvent=(await rankBoss('calendar/events',{mosque_id:rankMid,title:'نشاط سابق لا يولّد تنبيهًا',date:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Beirut'}).format(new Date())},'POST',201)).id;
 await database.prepare('UPDATE calendar_events SET updated_at=?,published_at=? WHERE id=?').bind(Date.parse(oldTime),Date.parse(oldTime),oldEvent).run();
 const resetFeed=await rankTeacher('calendar');assert.ok(resetFeed.events.some(e=>e.id===oldEvent));assert.ok(resetFeed.notifications_since>=Date.parse((await data(rankTeacher)).user.created_at));assert.ok(resetFeed.events.find(e=>e.id===oldEvent).updated_at<resetFeed.seen_at);
 // Daily encounters, multiple circles, generated teaching accounts and correction safety.
