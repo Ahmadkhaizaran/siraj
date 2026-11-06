@@ -5,7 +5,7 @@ import {officialMosqueLogo} from '../lib/mosque-branding';
 type Row=Record<string,any>;
 async function picture(src:string){const img=new Image();img.src=src;await img.decode();return img}
 export async function achievementImage(data:Row,index:number):Promise<Blob>{
- await document.fonts.load('700 64px "Noto Sans Arabic"');await document.fonts.load('400 32px "Noto Sans Arabic"');
+ await document.fonts.load('700 64px "IBM Plex Sans Arabic"');await document.fonts.load('400 32px "IBM Plex Sans Arabic"');
  const canvas=document.createElement('canvas');canvas.width=4200;canvas.height=2970;const c=canvas.getContext('2d')!;if(!c)throw Error('تعذّر إنشاء الصورة');
  c.scale(2,2);const r=RANKS[index],W=2100,H=1485;
  const theme=['#426b53','#28725e','#2e6893','#72529c','#276e86','#97562e','#927018'][index];
@@ -21,12 +21,12 @@ export async function achievementImage(data:Row,index:number):Promise<Blob>{
  if(index>=5){c.fillStyle=theme;c.beginPath();c.moveTo(-80,40);c.lineTo(-115,185);c.lineTo(-50,150);c.lineTo(0,190);c.lineTo(35,45);c.fill();c.beginPath();c.moveTo(80,40);c.lineTo(115,185);c.lineTo(50,150);c.lineTo(0,190);c.lineTo(-35,45);c.fill()}
  const seal=c.createLinearGradient(-100,-100,100,100);seal.addColorStop(0,index===6?'#ebd494':theme);seal.addColorStop(1,index===6?'#a27c27':'#174e42');c.fillStyle=seal;c.beginPath();const corners=index+6;for(let i=0;i<corners*2;i++){const a=-Math.PI/2+i*Math.PI/corners,rr=i%2?98:112;c.lineTo(Math.cos(a)*rr,Math.sin(a)*rr)}c.closePath();c.fill();c.strokeStyle='#e2c787';c.lineWidth=3;c.stroke();
  c.fillStyle='#fff';c.textAlign='center';c.textBaseline='middle';
- if(index===6){c.beginPath();c.moveTo(-62,28);c.lineTo(-72,-45);c.lineTo(-30,-10);c.lineTo(0,-65);c.lineTo(30,-10);c.lineTo(72,-45);c.lineTo(62,28);c.closePath();c.fill();c.fillRect(-62,39,124,12)}else{c.font='700 70px "Noto Sans Arabic"';c.fillText(String(index+1),0,4)}c.restore();
+ if(index===6){c.beginPath();c.moveTo(-62,28);c.lineTo(-72,-45);c.lineTo(-30,-10);c.lineTo(0,-65);c.lineTo(30,-10);c.lineTo(72,-45);c.lineTo(62,28);c.closePath();c.fill();c.fillRect(-62,39,124,12)}else{c.font='700 70px "IBM Plex Sans Arabic"';c.fillText(String(index+1),0,4)}c.restore();
  c.direction='rtl';c.textAlign='center';c.textBaseline='middle';
- function text(value:string,y:number,size:number,color='#183c32',weight=700,max=1750){c.font=`${weight} ${size}px "Noto Sans Arabic"`;c.fillStyle=color;c.fillText(value,W/2,y,max)}
- c.drawImage(siraj,W-540,130,240,240);c.fillStyle='#174e42';c.font='700 48px "Noto Sans Arabic"';c.fillText('سِراج',W-420,420);
+ function text(value:string,y:number,size:number,color='#183c32',weight=700,max=1750){c.font=`${weight} ${size}px "IBM Plex Sans Arabic"`;c.fillStyle=color;c.fillText(value,W/2,y,max)}
+ c.drawImage(siraj,W-540,130,240,240);c.fillStyle='#174e42';c.font='700 48px "IBM Plex Sans Arabic"';c.fillText('سِراج',W-420,420);
  const mosqueSrc=data.mosque.logo||officialMosqueLogo(data.mosque.name);if(mosqueSrc){try{const logo=await picture(mosqueSrc);const scale=Math.min(280/logo.width,240/logo.height);c.drawImage(logo,280+(280-logo.width*scale)/2,130+(240-logo.height*scale)/2,logo.width*scale,logo.height*scale)}catch{throw Error('تعذّر تحميل شعار المسجد؛ أعد المحاولة أو حدّث الشعار من الإعدادات')}}
- c.fillStyle='#183c32';c.font='700 30px "Noto Sans Arabic"';c.fillText(data.mosque.name,420,420,400);
+ c.fillStyle='#183c32';c.font='700 30px "IBM Plex Sans Arabic"';c.fillText(data.mosque.name,420,420,400);
  text(index>=5?'شهادة تميّز واجتهاد':'شهادة إنجاز واجتهاد',475,60,r.color);text('نحتفي باجتهاد الطالب',575,32,'#52695f',400);text(data.student.name,685,86);
  text('رتبة '+r.name,795,65,r.color);text('الرصيد التراكمي: '+data.points+' نقطة',875,44);
  const last=data.records[0];if(last){text('آخر تقييم معتمد: '+last.day+' — '+last.meeting,980,29,'#52695f',400);text(MARKS.map(([key,label,max])=>label+' '+last[key]+'/'+max).join('  •  '),1050,29,'#183c32',400,1840);text('نقاط اللقاء: '+last.points+' — تشمل مكافأة الإتقان عند استحقاقها',1120,27,'#52695f',400)}
