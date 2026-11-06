@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.resolve('wrangler/package.json'));const {build}=require('esbuild');
+await build({entryPoints:['lib/prayer-times.ts'],outfile:'outputs/prayer-unit.mjs',format:'esm',platform:'node',bundle:true});
+const {prayerSchedule,parsePrayerConfig,TABLE_SOURCE}=await import('../outputs/prayer-unit.mjs');
+const config={id:'67',timezone:'Asia/Beirut',templateData:{masjidCity:'صيدا'},timings:{type:'table-api',url:TABLE_SOURCE},daylightSaving:{mode:'strategy-or-timezone'},prayers:['Fajr','Sunrise','Dhuhr','Asr','Maghrib','Isha'].map(key=>({key,timeOffset:0}))};
+const table=Array.from({length:366},()=>({Fajr:'4:28',Sunrise:'6:01',Dhuhr:'11:21',Asr:'14:20',Maghrib:'16:47',Isha:'18:05'}));
+const winter=prayerSchedule(config,table,Date.parse('2026-11-06T13:00:00Z'));assert.equal(winter.prayers[0].time,'04:28');assert.equal(winter.next.key,'Maghrib');assert.equal(winter.next.at,Date.parse('2026-11-06T14:47:00Z'));
+assert.equal(prayerSchedule(config,table,Date.parse('2026-07-06T00:00:00Z')).prayers[0].time,'05:28');
+assert.equal(prayerSchedule(config,table,Date.parse('2026-11-06T18:00:00Z')).next.date,'2026-11-07');
+assert.equal(prayerSchedule(config,table,Date.parse('2026-11-06T03:00:00Z')).next.key,'Dhuhr');
+table[310].Fajr='99:99';assert.throws(()=>prayerSchedule(config,table,Date.parse('2026-11-06T13:00:00Z')));table[310].Fajr='4:28';
+assert.throws(()=>prayerSchedule(config,table.slice(0,365),Date.now()));
+const encoded=JSON.stringify({configuration:config}).replaceAll('"','&quot;');assert.equal(parsePrayerConfig('<masjidi-data data="'+encoded+'">').id,'67');
+assert.throws(()=>parsePrayerConfig('<masjidi-data data="'+encoded.replace('صيدا','بيروت')+'">'));
+table[59].Fajr='4:00';table[60].Fajr='4:01';assert.equal(prayerSchedule(config,table,Date.parse('2026-03-01T00:00:00Z')).prayers[0].time,'04:01');
+console.log('PASS: Beirut timezone, summer/winter, 366-day indexing, next-day rollover, sunrise exclusion, invalid/stale-source safeguards.');
