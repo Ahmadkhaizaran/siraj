@@ -9,7 +9,7 @@ export async function achievementImage(data:Row,index:number):Promise<Blob>{
  const canvas=document.createElement('canvas');canvas.width=4200;canvas.height=2970;const c=canvas.getContext('2d')!;if(!c)throw Error('تعذّر إنشاء الصورة');
  c.scale(2,2);const r=RANKS[index],W=2100,H=1485;
  const theme=['#426b53','#28725e','#2e6893','#72529c','#276e86','#97562e','#927018'][index];
- const wash=c.createLinearGradient(0,0,W,H);wash.addColorStop(0,'#ffffff');wash.addColorStop(1,index===6?'#fcf3d9':'#f2f7f3');c.fillStyle=wash;c.fillRect(0,0,W,H);
+ const wash=c.createLinearGradient(0,0,W,H);wash.addColorStop(0,'#ffffff');wash.addColorStop(.55,['#e5faed','#e1f8f7','#e9efff','#f7eaff','#e0f6ff','#fff0e4','#fff4cf'][index]);wash.addColorStop(1,'#ffffff');c.fillStyle=wash;c.fillRect(0,0,W,H);
  // Siraj's arch is repeated as a quiet watermark, preserving legibility for print.
  const siraj=await picture('/favicon.svg');c.save();c.globalAlpha=.035;c.drawImage(siraj,590,300,920,920);c.restore();
  c.fillStyle='#174e42';c.beginPath();c.moveTo(0,0);c.lineTo(430,0);c.lineTo(0,430);c.fill();c.beginPath();c.moveTo(W,H);c.lineTo(W-430,H);c.lineTo(W,H-430);c.fill();
