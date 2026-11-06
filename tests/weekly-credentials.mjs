@@ -1,0 +1,64 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { readFile, mkdir, readdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+const requireWrangler=createRequire(import.meta.resolve('wrangler/package.json'));
+const { Miniflare }=requireWrangler('miniflare');
+const { build }=requireWrangler('esbuild');
+await mkdir('outputs',{recursive:true});
+// The injected sync route exists only in this local test bundle, never in the application.
+const entry=`import { handle } from './lib/server.ts';import { syncMasjidi } from './lib/community-server.ts';export default { async fetch(request,env){if(new URL(request.url).pathname==='/__test/sync'){const payload=await request.json();await syncMasjidi(env.DB.withSession('first-primary'),async(url)=>{const id=String(url).split('/').pop();if(payload.fail)return new Response('Unavailable',{status:503});return new Response(payload.pages[id]||'invalid page');});return Response.json({ok:true});}return handle(request)} };`;
+await build({stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},bundle:true,external:['cloudflare:workers'],format:'esm',platform:'neutral',outfile:'outputs/qa-worker.mjs'});
+const usePostgres=process.env.SIRAJ_TEST_DATABASE==='postgres';
+const pgHarness=usePostgres?await (await import('./postgres-harness.mjs')).postgresHarness(build):null;
+const mf=pgHarness?.mf||new Miniflare({modules:true,scriptPath:'outputs/qa-worker.mjs',compatibilityDate:'2026-05-15',compatibilityFlags:['nodejs_compat'],d1Databases:['DB'],bindings:{SIRAJ_PASSWORD_PEPPER:'local-test-only-pepper-not-for-production',SIRAJ_SETUP_TOKEN_HASH:createHash('sha256').update('local-setup-token').digest('hex')}});
+const database=pgHarness?.database||await mf.getD1Database('DB');
+for(const file of usePostgres?[]:(await readdir('drizzle')).filter(f=>f.endsWith('.sql')).sort()){
+ const migration=await readFile('drizzle/'+file,'utf8');
+ await database.batch(migration.split('--> statement-breakpoint').map(s=>s.trim()).filter(Boolean).map(s=>database.prepare(s)));
+}
+const localFetch=pgHarness?.localFetch||((...args)=>mf.dispatchFetch(...args));
+const origin=process.env.SIRAJ_TEST_ORIGIN||'http://terminal.local:4173';
+if(!['terminal.local','127.0.0.1','localhost'].includes(new URL(origin).hostname))throw new Error('Integration suite is local-only; never run against production.');
+const day='2026-11-02';
+let checks=0,lastCookieHeader='';
+function client(seed=''){let cookie=seed;return async(path,body,method='POST',expected=200,originOverride=origin)=>{if(path==='students'&&body&&method==='POST'&&body.english_name===undefined)body={...body,english_name:'Student Test'};const r=await localFetch(origin+'/api/'+path,{method:body?method:'GET',headers:{...(body?{'Content-Type':'application/json','Origin':originOverride}:{}),...(cookie?{Cookie:cookie}:{})},body:body?JSON.stringify(body):undefined});const d=await r.json();assert.equal(r.status,expected,`${method} ${path}: ${JSON.stringify(d)}`);const next=r.headers.get('set-cookie');if(next){cookie=next.split(';')[0];lastCookieHeader=next;}checks++;return d;};}
+try{
+const admin=client(),boss=client(),teacher=client();
+await admin('auth/setup',{setup_key:'local-setup-token',name:'Local Owner',username:'local.owner',password:'LocalOwner123!'},'POST',201);
+const platform=client();
+const platformBody={name:'مشرف منصّة تجريبي',english_name:'Ahmad Test',phone:'70000001',auto_credentials:true};
+const generated=await admin('platform-users',platformBody,'POST',201);assert.equal(generated.credentials.username,'sj.ahmad.test');assert.equal(generated.credentials.password.length,12);await platform('auth/login',generated.credentials);
+const duplicate=await admin('platform-users',platformBody,'POST',201);assert.equal(duplicate.credentials.username,'sj.ahmad.test2');assert.notEqual(duplicate.credentials.password,generated.credentials.password);
+await platform('platform-users',platformBody,'POST',403);await admin('platform-users',{...platformBody,english_name:''},'POST',400);
+const mid=(await admin('data')).mosques[0].id;
+const lead=await admin('users',{mosque_id:mid,name:'مشرف اختبار',english_name:'Test Lead',phone:'70000000',role:'primary',auto_credentials:true},'POST',201);
+assert.equal(lead.credentials.username,'edu.test.lead');assert.equal(lead.credentials.password.length,12);
+await boss('auth/login',lead.credentials);await boss('platform-users',platformBody,'POST',403);
+const staff=await boss('users',{mosque_id:mid,name:'مدرّس اختبار',english_name:'Test Lead',phone:'70000000',role:'teacher',auto_credentials:true},'POST',201);
+assert.equal(staff.credentials.username,'edu.test.lead2');await teacher('auth/login',staff.credentials);
+const cid=(await boss('circles',{mosque_id:mid,name:'حلقة اختبار',teacher_id:staff.id,level:'قرآن'},'POST',201)).id;
+const sid=(await boss('students',{mosque_id:mid,name:'طالب اختبار',english_name:'Test Student',circle_id:cid},'POST',201));
+const recovered=await boss('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'});assert.equal(recovered.credentials.password,sid.credentials.password);
+const pupil=client();await pupil('auth/login',recovered.credentials);
+await teacher('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'},'POST',403);
+await pupil('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'},'POST',403);
+await pupil('auth/password',{current_password:recovered.credentials.password,new_password:'StudentNew123!'});
+assert.equal((await boss('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'})).credentials.password,'StudentNew123!');
+const enc=await database.prepare('SELECT value FROM settings WHERE key=?').bind('student-credential:'+sid.id).first();assert.ok(!enc.value.includes('StudentNew123!'));
+const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Beirut'}).format(new Date()),weekday=new Date(today+'T12:00:00Z').getUTCDay();
+const payload={mosque_id:mid,circle_id:cid,date:today,revision:0,records:[{student_id:sid.id,status:'present',quran:7,religion:5,conduct:5,activity:5}]};
+await teacher('circle-session',payload,'POST',403);
+await teacher('circle-schedule',{mosque_id:mid,circle_id:cid,schedule:{weekday,mode:'day'}},'POST',403);
+await boss('circle-schedule',{mosque_id:mid,circle_id:cid,schedule:{weekday:(weekday+1)%7,mode:'day'}});
+await teacher('circle-session',payload,'POST',403);
+await boss('circle-schedule',{mosque_id:mid,circle_id:cid,schedule:{weekday,mode:'day'}});
+assert.equal((await teacher('circle-session?mosque='+mid+'&circle_id='+cid+'&date='+today)).can_record,true);
+await teacher('circle-session',payload);
+assert.equal((await teacher('circle-session?mosque='+mid+'&circle_id='+cid+'&date='+today)).can_record,false);
+await teacher('circle-session',{...payload,revision:1},'POST',403);
+assert.equal(Number((await database.prepare('SELECT SUM(points) AS n FROM motivational_scores WHERE student_id=?').bind(sid.id).first()).n),30);
+await boss('circle-schedule',{mosque_id:mid,circle_id:cid,schedule:{weekday,mode:'clock',time:'00:00'}});
+await teacher('circle-session',{...payload,revision:1},'POST',403);
+console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
+}finally{await mf.dispose()}

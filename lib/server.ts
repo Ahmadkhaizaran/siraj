@@ -1,3 +1,4 @@
+import {sealStudentPassword,openStudentPassword,readablePassword} from './credential-vault';
 import {circleSession} from './circle-sessions';
 import { defaultRuntime, type SirajRuntime } from './server-runtime';
 import { digest, equal, hashPassword, verifyPassword, token } from './auth-crypto';
@@ -126,7 +127,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   const isOwner=user.role==='admin',isAdmin=['admin','platform_supervisor'].includes(user.role),manager=isAdmin||user.role==='primary',isTeacher=user.role==='teacher',isStudent=user.role==='student';
   if(isStudent&&path==='export')fail(403,'تصدير بيانات الجهة متاح لإدارتها فقط');
   if(isStudent&&write&&!['auth/password','calendar/seen'].includes(path))fail(403,'حساب الطالب للعرض فقط');
-  if(isAdmin&&['students','circles','attendance','progress','export','student-profile','memorization','assessments','student-account','motivation','circle-session','circle-enrollments'].includes(path))fail(403,'المتابعة التعليمية من صلاحيات إدارة المسجد أو المركز ومدرّسيه');
+  if(isAdmin&&['students','circles','attendance','progress','export','student-profile','memorization','assessments','student-account','motivation','circle-session','circle-enrollments','circle-schedule'].includes(path))fail(403,'المتابعة التعليمية من صلاحيات إدارة المسجد أو المركز ومدرّسيه');
   const scope=(mosque:unknown)=>{const mid=text(mosque,'المسجد',80);if(!isAdmin&&mid!==user.mosque_id)fail(403,'ليس لديك صلاحية الوصول إلى هذا المسجد أو المركز');return mid;};
   const mosqueExists=async(mid:string)=>{if(!await one('SELECT id FROM mosques WHERE id=? AND cancelled_at IS NULL',mid))fail(404,'المسجد أو المركز غير موجود');};
   const circleAccess=async(cid:string,mid:string)=>{const c=await one("SELECT * FROM circles WHERE id=? AND mosque_id=? AND status='active'",cid,mid);if(!c)fail(404,'الحلقة غير موجودة في هذا المسجد أو المركز');if(isTeacher&&c!.teacher_id!==user.id)fail(403,'هذه الحلقة غير مسندة إليك');return c!;};
@@ -135,12 +136,17 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   const params=new URL(req.url).searchParams;
   if(path==='platform-users'&&['POST','PATCH'].includes(method)){
    if(!isOwner)fail(403,'إدارة فريق المنصّة من صلاحيات المدير فقط');
-   const name=text(body.name,'الاسم'),login=username(body.username),phone=text(body.phone,'الهاتف',60,false);
+   const automatic=method==='POST'&&(body.auto_credentials===true||!body.username||!body.password);
+   const name=text(body.name,'الاسم'),phone=text(body.phone,'الهاتف',60,automatic);let login=automatic?'':username(body.username);
    if(/^srg-\d+$/.test(login))fail(400,'هذه الصيغة محجوزة للطلاب');
    if(method==='POST'){
-    const uid=id(),hashed=await hashPassword(password(body.password),pepper());
-    await db.batch([q("INSERT INTO users (id,name,username,password_hash,role,mosque_id,phone,active,created_at) VALUES (?,?,?,?,'platform_supervisor',NULL,?,1,?)",uid,name,login,hashed,phone,now()),audit(null,'أُضيف مشرف منصّة '+name)]);
-    return json({ok:true,id:uid},201);
+    const englishName=text(body.english_name,'الاسم بالإنجليزي',120,automatic);
+    if(englishName&&!/^[A-Za-z][A-Za-z .'-]{1,119}$/.test(englishName))fail(400,'اكتب الاسم بالإنجليزي');
+    const secret=automatic?readablePassword():password(body.password);
+    if(automatic){const base='sj.'+englishName.toLowerCase().replace(/[^a-z0-9]+/g,'.').replace(/^\.|\.$/g,'').slice(0,25).replace(/\.$/,'');for(let attempt=0;attempt<100;attempt++){login=base+(attempt?String(attempt+1):'');if(!await one('SELECT id FROM users WHERE username=?',login))break;login='';}if(!login)fail(503,'تعذّر توليد اسم الدخول، حاول مجددًا')}
+    const uid=id(),hashed=await hashPassword(secret,pepper());
+    await db.batch([q("INSERT INTO users (id,name,english_name,username,password_hash,role,mosque_id,phone,active,created_at) VALUES (?,?,?,?,?,'platform_supervisor',NULL,?,1,?)",uid,name,englishName,login,hashed,phone,now()),audit(null,'أُضيف مشرف منصّة '+name)]);
+    return json({ok:true,id:uid,...(automatic?{credentials:{username:login,password:secret}}:{})},201);
    }
    const target=await one("SELECT id FROM users WHERE id=? AND role='platform_supervisor' AND cancelled_at IS NULL",text(body.id,'الحساب',80));
    if(!target)fail(404,'مشرف المنصّة غير موجود');
@@ -263,10 +269,12 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   }
   if(path==='auth/password'&&method==='POST'){
    const old=loginPassword(body.current_password),next=password(body.new_password);
-   const existing=await one('SELECT password_hash FROM users WHERE id=?',user.id);
+   const existing=await one('SELECT password_hash,student_id FROM users WHERE id=?',user.id);
    await throttle('password:'+user.id,10);
    if(!await verifyPassword(old,existing!.password_hash,pepper()))fail(400,'كلمة السر الحالية غير صحيحة');
-   await db.batch([q('UPDATE users SET password_hash=? WHERE id=?',await hashPassword(next,pepper()),user.id),q('DELETE FROM sessions WHERE user_id=?',user.id)]);
+   const nextHash=await hashPassword(next,pepper());
+   const recovery=existing?.student_id?await sealStudentPassword(existing.student_id,nextHash,next,pepper()):null;
+   await db.batch([q('UPDATE users SET password_hash=? WHERE id=?',nextHash,user.id),...(recovery?[q('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value','student-credential:'+existing!.student_id,recovery)]:[]),q('DELETE FROM sessions WHERE user_id=?',user.id)]);
    const t=await newSession(user.id);return json({ok:true},200,{'Set-Cookie':sessionCookie(req,t,issuedSessionAge)});
   }
   if(path==='mosques'&&method==='POST'){
@@ -294,10 +302,10 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    if(method==='POST'){
     const englishName=text(body.english_name,'الاسم بالإنجليزي',120,automatic);
     if(englishName&&!/^[A-Za-z][A-Za-z .'-]{1,119}$/.test(englishName))fail(400,'اكتب الاسم بالإنجليزي');
-    const secret=automatic?token().slice(0,24):password(body.password);
+    const secret=automatic?readablePassword():password(body.password);
     if(automatic){
      const base='edu.'+englishName.toLowerCase().replace(/[^a-z0-9]+/g,'.').replace(/^\.|\.$/g,'').slice(0,25).replace(/\.$/,'');
-     for(let attempt=0;attempt<5;attempt++){login=base+'.'+token().slice(0,8);if(!await one('SELECT id FROM users WHERE username=?',login))break;login='';}
+     for(let attempt=0;attempt<100;attempt++){login=base+(attempt?String(attempt+1):'');if(!await one('SELECT id FROM users WHERE username=?',login))break;login='';}
      if(!login)fail(503,'تعذّر توليد اسم الدخول، حاول مجددًا');
     }
     const uid=id(),hashed=await hashPassword(secret,pepper());
@@ -315,7 +323,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    statements.push(q('DELETE FROM sessions WHERE user_id=?',target.id),audit(mid,'حُدّث حساب '+name));
    await db.batch(statements);return json({ok:true});
   }
-  if(['circle-session','circle-enrollments'].includes(path))return await circleSession({db,user,body,params,method,path,scope,circleAccess,mosqueExists,text,date,fail,json});
+  if(['circle-session','circle-enrollments','circle-schedule'].includes(path))return await circleSession({db,user,body,params,method,path,scope,circleAccess,mosqueExists,text,date,fail,json});
   if(path==='circles'&&['POST','PATCH'].includes(method)){
    if(!manager)fail(403,'إدارة الحلقات وتعيين مدرّسيها من صلاحيات المشرف الأساسي');
    const mid=scope(body.mosque_id);await mosqueExists(mid);
@@ -357,8 +365,8 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    let credentials:Row|undefined;
    if(method==='POST'){
     // Hash before mutation. Student code allocation, profile and account commit atomically.
-    const secret=studentPassword(englishName),hashed=await hashPassword(secret,pepper()),uid=id();
-    await db.batch([statement,q('INSERT INTO student_codes (student_id) VALUES (?)',sid),q("INSERT INTO users (id,mosque_id,name,username,password_hash,role,student_id,active,created_at) SELECT ?,?,?,lower('SRG-'||number),?,'student',?,?,? FROM student_codes WHERE student_id=?",uid,mid,name,hashed,sid,status==='active'?1:0,now(),sid),audit(mid,'انضم الطالب '+name)]);
+    const secret=studentPassword(englishName),hashed=await hashPassword(secret,pepper()),uid=id(),vault=await sealStudentPassword(sid,hashed,secret,pepper());
+    await db.batch([statement,q('INSERT INTO settings (key,value) VALUES (?,?)','student-credential:'+sid,vault),q('INSERT INTO student_codes (student_id) VALUES (?)',sid),q("INSERT INTO users (id,mosque_id,name,username,password_hash,role,student_id,active,created_at) SELECT ?,?,?,lower('SRG-'||number),?,'student',?,?,? FROM student_codes WHERE student_id=?",uid,mid,name,hashed,sid,status==='active'?1:0,now(),sid),audit(mid,'انضم الطالب '+name)]);
     const code=await one('SELECT username FROM users WHERE id=?',uid);credentials={username:code!.username.toUpperCase(),password:secret};
    }else{
     await db.batch([statement,q("UPDATE users SET name=?,active=? WHERE student_id=?",name,status==='active'?1:0,sid),...(status==='inactive'?[q('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE student_id=?)',sid)]:[]),audit(mid,'حُدّث ملف الطالب '+name)]);
@@ -368,14 +376,22 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   if(path==='student-account'&&method==='POST'){
    if(!manager||isAdmin)fail(403,'بيانات دخول الطالب من صلاحيات المشرف الأساسي');
    const mid=scope(body.mosque_id),sid=text(body.student_id,'الطالب',80),student=await studentAccess(sid,mid);
+   if(body.action==='reveal'){
+    await throttle('student-recovery:'+user.id,30);
+    const account=await one("SELECT username,password_hash FROM users WHERE student_id=? AND role='student'",sid),saved=await one('SELECT value FROM settings WHERE key=?','student-credential:'+sid);
+    if(!account||!saved)fail(409,'هذا الحساب قديم؛ جدّد كلمة السر مرة واحدة لتفعيل الاسترجاع المحمي');
+    let secret='';try{secret=await openStudentPassword(sid,account!.password_hash,saved!.value,pepper())}catch{fail(409,'تغيّرت بيانات الحساب أو تعذّر فك الحفظ؛ جدّد كلمة السر')}
+    await audit(mid,'استُرجعت بيانات دخول الطالب '+student.name).run();
+    return json({ok:true,credentials:{username:account!.username.toUpperCase(),password:secret}});
+   }
    const englishName=body.english_name?text(body.english_name,'الاسم بالإنجليزي',120):student.english_name;
    if(!englishName||!/^[A-Za-z][A-Za-z .'-]{1,119}$/.test(englishName))fail(400,'أضف اسم الطالب بالإنجليزي أولًا');
-   const secret=studentPassword(englishName),hashed=await hashPassword(secret,pepper());
+   const secret=studentPassword(englishName),hashed=await hashPassword(secret,pepper()),vault=await sealStudentPassword(sid,hashed,secret,pepper());
    await q('INSERT OR IGNORE INTO student_codes (student_id) VALUES (?)',sid).run();
    const n=await one('SELECT number FROM student_codes WHERE student_id=?',sid),login='srg-'+String(n!.number);
    const target=await one('SELECT id FROM users WHERE student_id=?',sid);
    const change=target?q('UPDATE users SET username=?,password_hash=?,active=? WHERE id=?',login,hashed,student.status==='active'?1:0,target.id):q("INSERT INTO users (id,mosque_id,name,username,password_hash,role,student_id,active,created_at) VALUES (?,?,?,?,?,'student',?,?,?)",id(),mid,student.name,login,hashed,sid,student.status==='active'?1:0,now());
-   await db.batch([change,q('UPDATE students SET english_name=? WHERE id=?',englishName,sid),q('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE student_id=?)',sid),audit(mid,'جُدّدت بيانات دخول الطالب '+student.name)]);
+   await db.batch([change,q('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value','student-credential:'+sid,vault),q('UPDATE students SET english_name=? WHERE id=?',englishName,sid),q('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE student_id=?)',sid),audit(mid,'جُدّدت بيانات دخول الطالب '+student.name)]);
    return json({ok:true,credentials:{username:login.toUpperCase(),password:secret}});
   }
   if(path==='platform-achievements'&&['GET','POST'].includes(method)){

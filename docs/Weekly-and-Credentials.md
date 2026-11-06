@@ -1,0 +1,11 @@
+# Weekly encounters and account recovery
+
+Circle schedules are stored as versioned settings under circle-schedule:<id>, with weekday and one opening rule (whole day, clock, or a Masjidi Sidon adhan plus explicit offset). Unconfigured circles are closed until the primary supervisor sets their schedule. Current-day and Beirut-week checks run server-side. All active members need a recorded status before finalization. One successful encounter seals that circle's ISO week; previous encounters are read-only. Changing the timetable cannot reopen a sealed week. Atomic writes also check that the schedule and teacher assignment did not change. No historical scores are removed.
+
+Student passwords generated or changed after this update are recoverable only by the primary supervisor in that student's organization via an explicit POST action. Recovery is throttled and audited, and responses use no-store. Password hashes remain PBKDF2. The separate vault stores AES-GCM ciphertext with a unique random nonce, binds student ID and current password hash as authenticated data, and derives a dedicated key through HKDF from the existing protected server secret. No plaintext password is stored in the database or audit log. Older hashed passwords cannot be recovered; regenerate once. A student password change updates both hash and encrypted recovery atomically.
+
+New staff usernames use edu.<english-name>, appending a number only for collisions. Generated passwords are 12 random characters from a readable alphabet, sampled without modulo bias. Existing usernames/passwords are unchanged.
+
+Validation: focused API tests on D1 and PostgreSQL, weekly clock/prayer cases and source failure, vault binding/wrong key tests, production frontend build. The historical 501-check suite contains assertions for previously editable encounters and must be updated before using it as a gate for the new finalization policy; it is not reported as passing for this release.
+
+Platform supervisors: only owner can create accounts. New form requests Arabic/English names and phone; username is sj.<name> with numeric collision suffix, plus 12-character readable random password. Plaintext appears once to authorized creator. Existing accounts keep usernames and hashes.
