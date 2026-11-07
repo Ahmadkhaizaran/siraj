@@ -134,6 +134,18 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   const studentAccess=async(sid:string,mid:string)=>{if(isStudent&&sid!==user.student_id)fail(403,'يمكنك عرض ملفّك فقط');const s=await one("SELECT * FROM students WHERE id=? AND mosque_id=? AND status!='deleted'",sid,mid);if(!s)fail(404,'الطالب غير موجود في هذا المسجد أو المركز');if(isTeacher&&!await one("SELECT c.id FROM circles c WHERE c.mosque_id=? AND c.teacher_id=? AND c.status='active' AND (c.id=? OR EXISTS (SELECT 1 FROM circle_enrollments ce WHERE ce.circle_id=c.id AND ce.student_id=?))",mid,user.id,s!.circle_id,sid))fail(403,'الطالب غير مسند إلى حلقتك');return s!;};
   const audit=(mid:string|null,message:string)=>q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',id(),mid,user.id,message,now());
   const params=new URL(req.url).searchParams;
+  if(path==='staff-credentials'&&method==='POST'){
+   if(!isOwner)fail(403,'نسخ بيانات حسابات الفريق من صلاحيات صاحب المنصّة فقط');
+   await throttle('staff-recovery:'+user.id,30);
+   const target=await one("SELECT id,name,username,password_hash,role,mosque_id,active FROM users WHERE id=? AND cancelled_at IS NULL",text(body.id,'الحساب',80));
+   if(!target||!['primary','supervisor','teacher','platform_supervisor'].includes(target.role)||!target.active)fail(404,'الحساب غير متاح للاسترجاع');
+   if(target.mosque_id)await mosqueExists(target.mosque_id);
+   const saved=await one('SELECT value FROM settings WHERE key=?','staff-credential:'+target.id);
+   if(!saved)fail(409,'الحساب قديم؛ عيّن كلمة سر جديدة واحفظها مرة واحدة لتفعيل نسخ بيانات الدخول');
+   let secret='';try{secret=await openStudentPassword('staff:'+target.id,target.password_hash,saved.value,pepper())}catch{fail(409,'تغيّرت كلمة السر؛ جدّدها واحفظها مرة واحدة لتفعيل النسخ')}
+   await audit(target.mosque_id,'استُرجعت بيانات دخول حساب الفريق '+target.name).run();
+   return json({kind:target.role==='platform_supervisor'?'platform':'staff',credentials:{name:target.name,username:target.username,password:secret}});
+  }
   if(path==='platform-users'&&['POST','PATCH'].includes(method)){
    if(!isOwner)fail(403,'إدارة فريق المنصّة من صلاحيات المدير فقط');
    const automatic=method==='POST'&&(body.auto_credentials===true||!body.username||!body.password);
@@ -145,13 +157,13 @@ export async function handle(req:Request,runtime?:SirajRuntime){
     const secret=automatic?readablePassword():password(body.password);
     if(automatic){const base='sj.'+englishName.toLowerCase().replace(/[^a-z0-9]+/g,'.').replace(/^\.|\.$/g,'').slice(0,25).replace(/\.$/,'');for(let attempt=0;attempt<100;attempt++){login=base+(attempt?String(attempt+1):'');if(!await one('SELECT id FROM users WHERE username=?',login))break;login='';}if(!login)fail(503,'تعذّر توليد اسم الدخول، حاول مجددًا')}
     const uid=id(),hashed=await hashPassword(secret,pepper());
-    await db.batch([q("INSERT INTO users (id,name,english_name,username,password_hash,role,mosque_id,phone,active,created_at) VALUES (?,?,?,?,?,'platform_supervisor',NULL,?,1,?)",uid,name,englishName,login,hashed,phone,now()),audit(null,'أُضيف مشرف منصّة '+name)]);
+    await db.batch([q("INSERT INTO users (id,name,english_name,username,password_hash,role,mosque_id,phone,active,created_at) VALUES (?,?,?,?,?,'platform_supervisor',NULL,?,1,?)",uid,name,englishName,login,hashed,phone,now()),q('INSERT INTO settings (key,value) VALUES (?,?)','staff-credential:'+uid,await sealStudentPassword('staff:'+uid,hashed,secret,pepper())),audit(null,'أُضيف مشرف منصّة '+name)]);
     return json({ok:true,id:uid,...(automatic?{credentials:{username:login,password:secret}}:{})},201);
    }
    const target=await one("SELECT id FROM users WHERE id=? AND role='platform_supervisor' AND cancelled_at IS NULL",text(body.id,'الحساب',80));
    if(!target)fail(404,'مشرف المنصّة غير موجود');
    const statements=[q('UPDATE users SET name=?,username=?,phone=?,active=? WHERE id=?',name,login,phone,body.active===0?0:1,target.id),q('DELETE FROM sessions WHERE user_id=?',target.id),audit(null,'حُدّث مشرف منصّة '+name)];
-   if(body.password)statements.push(q('UPDATE users SET password_hash=? WHERE id=?',await hashPassword(password(body.password),pepper()),target.id));
+   if(body.password){const secret=password(body.password),hashed=await hashPassword(secret,pepper());statements.push(q('UPDATE users SET password_hash=? WHERE id=?',hashed,target.id),q('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value','staff-credential:'+target.id,await sealStudentPassword('staff:'+target.id,hashed,secret,pepper())))}
    await db.batch(statements);return json({ok:true});
   }
   if(path==='support/broadcast'&&method==='POST'){
@@ -274,7 +286,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    if(!await verifyPassword(old,existing!.password_hash,pepper()))fail(400,'كلمة السر الحالية غير صحيحة');
    const nextHash=await hashPassword(next,pepper());
    const recovery=existing?.student_id?await sealStudentPassword(existing.student_id,nextHash,next,pepper()):null;
-   await db.batch([q('UPDATE users SET password_hash=? WHERE id=?',nextHash,user.id),...(recovery?[q('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value','student-credential:'+existing!.student_id,recovery)]:[]),q('DELETE FROM sessions WHERE user_id=?',user.id)]);
+   await db.batch([q('UPDATE users SET password_hash=? WHERE id=?',nextHash,user.id),...(!existing?.student_id&&['primary','supervisor','teacher','platform_supervisor'].includes(user.role)?[q('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value','staff-credential:'+user.id,await sealStudentPassword('staff:'+user.id,nextHash,next,pepper()))]:[]),...(recovery?[q('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value','student-credential:'+existing!.student_id,recovery)]:[]),q('DELETE FROM sessions WHERE user_id=?',user.id)]);
    const t=await newSession(user.id);return json({ok:true},200,{'Set-Cookie':sessionCookie(req,t,issuedSessionAge)});
   }
   if(path==='mosques'&&method==='POST'){
@@ -309,7 +321,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
      if(!login)fail(503,'تعذّر توليد اسم الدخول، حاول مجددًا');
     }
     const uid=id(),hashed=await hashPassword(secret,pepper());
-    await db.batch([q('INSERT INTO users (id,mosque_id,name,english_name,username,password_hash,role,phone,active,created_at) VALUES (?,?,?,?,?,?,?,?,1,?)',uid,mid,name,englishName,login,hashed,role,phone,now()),audit(mid,'أُضيف حساب '+name)]);
+    await db.batch([q('INSERT INTO users (id,mosque_id,name,english_name,username,password_hash,role,phone,active,created_at) VALUES (?,?,?,?,?,?,?,?,1,?)',uid,mid,name,englishName,login,hashed,role,phone,now()),q('INSERT INTO settings (key,value) VALUES (?,?)','staff-credential:'+uid,await sealStudentPassword('staff:'+uid,hashed,secret,pepper())),audit(mid,'أُضيف حساب '+name)]);
     return json({ok:true,id:uid,...(automatic?{credentials:{username:login,password:secret}}:{})},201);
    }
    const target=await one('SELECT * FROM users WHERE id=? AND mosque_id=? AND cancelled_at IS NULL',text(body.id,'الحساب',80),mid);
@@ -319,7 +331,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const englishName=body.english_name==null?target.english_name||'':text(body.english_name,'الاسم بالإنجليزي',120,false);
    if(englishName&&!/^[A-Za-z][A-Za-z .'-]{1,119}$/.test(englishName))fail(400,'اكتب الاسم بالإنجليزي');
    const statements=[q('UPDATE users SET name=?,english_name=?,username=?,role=?,phone=?,active=? WHERE id=?',name,englishName,login,role,phone,active,target.id)];
-   if(body.password)statements.push(q('UPDATE users SET password_hash=? WHERE id=?',await hashPassword(password(body.password),pepper()),target.id));
+   if(body.password){const secret=password(body.password),hashed=await hashPassword(secret,pepper());statements.push(q('UPDATE users SET password_hash=? WHERE id=?',hashed,target.id),q('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value','staff-credential:'+target.id,await sealStudentPassword('staff:'+target.id,hashed,secret,pepper())))}
    statements.push(q('DELETE FROM sessions WHERE user_id=?',target.id),audit(mid,'حُدّث حساب '+name));
    await db.batch(statements);return json({ok:true});
   }
