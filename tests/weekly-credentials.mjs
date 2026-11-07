@@ -173,5 +173,28 @@ const ownProfile=await pupil('student-profile?mosque='+mid+'&student_id='+sid.id
 assert.ok(ownProfile.circles.some(c=>c.id===cid));
 assert.ok(ownProfile.encounters.every(e=>e.circle_name));
 await pupil('student-profile?mosque='+otherMosque+'&student_id='+otherStudent.id,undefined,'GET',403);
+
+const supervision=await boss('supervision-report?mosque='+mid);
+assert.ok(supervision.students.some(s=>s.id===sid.id));
+assert.equal(supervision.students.find(s=>s.id===sid.id).counts.present,1);
+await supervisor('supervision-report?mosque='+mid);
+await pupil('supervision-report?mosque='+mid,undefined,'GET',403);
+await platform('supervision-report?mosque='+mid,undefined,'GET',403);
+await admin('supervision-report?mosque='+mid,undefined,'GET',403);
+await otherBoss('supervision-report?mosque='+mid,undefined,'GET',403);
+await boss('supervision-report',{mosque_id:mid},'POST',405);
+const reportTeacher=await boss('users',{mosque_id:mid,name:'مدرس تقرير',english_name:'Report Teacher',phone:'70000009',role:'teacher',auto_credentials:true},'POST',201);
+const reportClient=client();await reportClient('auth/login',reportTeacher.credentials);
+await reportClient('supervision-report?mosque='+mid,undefined,'GET',403);
+
+const excuseCircle=(await boss('circles',{mosque_id:mid,name:'حلقة أسباب الاعتذار',teacher_id:reportTeacher.id,level:'قرآن'},'POST',201)).id;
+await boss('circle-enrollments',{mosque_id:mid,circle_id:excuseCircle,student_ids:[sid.id]});
+await boss('circle-schedule',{mosque_id:mid,circle_id:excuseCircle,schedule:{weekday,mode:'day'}});
+const excuseRecord={student_id:sid.id,status:'excused',quran:0,religion:0,conduct:0,activity:0,notes:''};
+await reportClient('circle-session',{mosque_id:mid,circle_id:excuseCircle,date:today,revision:0,records:[excuseRecord]},'POST',400);
+await reportClient('circle-session',{mosque_id:mid,circle_id:excuseCircle,date:today,revision:0,records:[{...excuseRecord,notes:'موعد طبي'}]});
+const excuseSummary=(await boss('supervision-report?mosque='+mid)).students.find(s=>s.id===sid.id);
+assert.equal(excuseSummary.counts.excused,1);
+assert.ok(excuseSummary.history.some(r=>r.status==='excused'&&r.reason==='موعد طبي'));
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}

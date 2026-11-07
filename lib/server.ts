@@ -1,3 +1,4 @@
+import {supervisionReport} from './supervision-report';
 import {individualRecitation} from './individual-recitation';
 import {sealStudentPassword,openStudentPassword,readablePassword} from './credential-vault';
 import {circleSession} from './circle-sessions';
@@ -136,6 +137,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   const studentAccess=async(sid:string,mid:string)=>{if(isStudent&&sid!==user.student_id)fail(403,'يمكنك عرض ملفّك فقط');const s=await one("SELECT * FROM students WHERE id=? AND mosque_id=? AND status!='deleted'",sid,mid);if(!s)fail(404,'الطالب غير موجود في هذا المسجد أو المركز');if(isTeacher&&!await one("SELECT c.id FROM circles c WHERE c.mosque_id=? AND c.teacher_id=? AND c.status='active' AND (c.id=? OR EXISTS (SELECT 1 FROM circle_enrollments ce WHERE ce.circle_id=c.id AND ce.student_id=?))",mid,user.id,s!.circle_id,sid))fail(403,'الطالب غير مسند إلى حلقتك');return s!;};
   const audit=(mid:string|null,message:string)=>q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',id(),mid,user.id,message,now());
   const params=new URL(req.url).searchParams;
+  if(path==='supervision-report')return await supervisionReport({user,params,method,scope,mosqueExists,rows,fail,json});
   if(path==='individual-recitation')return await individualRecitation({db,user,body,params,method,fail,json,mosqueExists,text});
   if(path==='student-credentials'&&['GET','POST'].includes(method)){
    if(!isOwner)fail(403,'حسابات طلاب جميع الجهات من صلاحيات صاحب المنصّة فقط');

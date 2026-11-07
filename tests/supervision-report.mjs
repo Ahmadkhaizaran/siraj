@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+const req=createRequire(import.meta.resolve('wrangler/package.json'));
+await req('esbuild').build({entryPoints:['lib/supervision-report.ts'],bundle:true,format:'esm',platform:'node',outfile:'outputs/supervision-unit.mjs'});
+const {summarizeSupervision}=await import('../outputs/supervision-unit.mjs');
+const students=[{id:'s',name:'طالب'},{id:'other',name:'آخر'}];
+const attendance=[{student_id:'s',day:'2026-01-01',status:'absent'},{student_id:'s',day:'2026-01-02',status:'absent'},{student_id:'s',day:'2026-01-03',status:'excused',reason:'مرض'}];
+assert.equal(summarizeSupervision(students,attendance,[],[])[0].alert,false);
+attendance.push({student_id:'s',day:'2026-01-04',status:'absent'});
+const scores=[10,20,30,60,70,80].map((percent,i)=>({student_id:'s',id:String(i),day:'2026-01-0'+(i+1),series:'قرآن',percent}));
+const [s,other]=summarizeSupervision(students,attendance,scores,[{student_id:'s',ranges:'[[1,7]]'}]);
+assert.equal(s.alert,true);assert.equal(s.counts.absent,3);assert.equal(s.counts.excused,1);assert.equal(s.history.find(h=>h.status==='excused').reason,'مرض');assert.equal(s.verses,7);
+assert.equal(s.comparisons[0].first,20);assert.equal(s.comparisons[0].latest,70);assert.equal(s.comparisons[0].change,50);assert.equal(s.comparisons[0].window,3);
+assert.equal(other.attendance_rate,null);assert.equal(other.comparisons.length,0);
+assert.equal(summarizeSupervision(students,[],scores.slice(0,1),[])[0].comparisons[0].change,null);
+const reversed=scores.map(r=>({...r,percent:100-r.percent}));assert.equal(summarizeSupervision(students,[],reversed,[])[0].comparisons[0].change,-50);
+console.log('PASS: third absence threshold, separate excuses with reasons, tenant student summaries and comparable first/latest periods');

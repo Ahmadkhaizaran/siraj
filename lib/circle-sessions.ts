@@ -66,6 +66,7 @@ export async function circleSession(ctx:Row){
   const sid=text(input.student_id,'الطالب',80);if(seen.has(sid))fail(400,'الطالب مكرر');seen.add(sid);
   if(!await one("SELECT s.id FROM students s WHERE s.id=? AND s.mosque_id=? AND s.status!='deleted' AND ((s.status='active' AND "+member+") OR EXISTS (SELECT 1 FROM circle_records cr WHERE cr.student_id=s.id AND cr.session_id=?))",sid,mid,cid,cid,sessionId))fail(403,'الطالب غير مسجل في هذه الحلقة');
   if(!['present','late','absent','excused'].includes(input.status))fail(400,'حدّد حالة الحضور');
+  if(input.status==='excused'&&!String(input.notes||'').trim())fail(400,'أضف سبب الاعتذار للطالب');
   const values:Record<string,number>={attendance:input.status==='present'?3:input.status==='late'?2:0};
   for(const [key,label,max] of MARKS){if(key==='attendance')continue;const value=input[key]??0;if(!Number.isInteger(value)||value<0||value>max)fail(400,'تحقّق من علامة '+label);values[key]=value;}
   if(['absent','excused'].includes(input.status)&&Object.values(values).some(v=>v!==0))fail(400,'الطالب الغائب أو المعذور لا يحصل على علامات لقاء لم يحضره');
