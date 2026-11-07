@@ -1,0 +1,20 @@
+/* Mosque identity follows the current organization's logo, never a browser-wide preference. */
+html[data-mosque-theme]{--green:var(--mosque-primary);--green-dark:var(--mosque-hover);--sage:var(--mosque-soft);--bg:var(--mosque-page);--line:var(--mosque-line);--ink:var(--mosque-ink);--muted:var(--mosque-muted);--focus:var(--mosque-primary)}
+html[data-mosque-theme][data-theme=dark]{--green:var(--mosque-primary);--green-dark:var(--mosque-hover);--sage:var(--mosque-night-soft);--bg:var(--mosque-night);--white:var(--mosque-surface);--line:var(--mosque-night-line);--ink:#edf3ef;--muted:#bdc8c5;--focus:var(--mosque-bright)}
+html[data-mosque-theme] :is(.sidebar,.topbar,.panel,.stat-card,.modal,.notification-panel,.student-home>header){background-color:var(--white);border-color:var(--line)}
+html[data-mosque-theme] :is(.mosque-switch,.sidebar-note,.onboarding-card,.community-datebar,.info-strip,.top-student-card){background:var(--sage);border-color:var(--line);color:var(--ink)}
+html[data-mosque-theme] :is(.sidebar nav button.active,.nav-extra.active,.student-tabs button.active,.badge.green){background:var(--sage);color:var(--green)}
+html[data-mosque-theme] .sidebar nav button i{background:var(--green)}
+html[data-mosque-theme] :is(.sidebar nav button:hover,.nav-extra:hover,.icon-btn:hover,tbody tr:hover){background:var(--sage)}
+html[data-mosque-theme] .sidebar nav button>small{background:var(--sage);color:var(--green)}
+html[data-mosque-theme] :is(.text-button,.eyebrow,.hello-leaf,.mosque-icon,.circle-icon,.empty-icon,.student-home-brand){color:var(--green)}
+html[data-mosque-theme] .btn.primary{background:var(--green);color:#fff;border-color:var(--green)}
+html[data-mosque-theme] .btn.primary:hover:not(:disabled){background:var(--green-dark)}
+html[data-mosque-theme] :is(.welcome-banner,.auth-story){background:linear-gradient(125deg,var(--mosque-hover),var(--mosque-primary));color:#fff}
+html[data-mosque-theme] :is(.welcome-banner h2,.welcome-banner p){color:#fff}
+html[data-mosque-theme] :is(input,select,textarea){background:var(--white);border-color:var(--line);accent-color:var(--green)}
+html[data-mosque-theme] :is(input,select,textarea):focus{border-color:var(--focus)}
+html[data-mosque-theme] :is(.sidebar-note strong,.breadcrumb strong,.sidebar nav button,.nav-extra){color:var(--muted)}
+html[data-mosque-theme] .sidebar nav button.active{color:var(--green)}
+html[data-mosque-theme][data-theme=dark] :is(.text-button,.eyebrow,.hello-leaf,.circle-icon,.empty-icon,.student-home-brand,.sidebar nav button.active,.nav-extra.active,.student-tabs button.active,.badge.green,.sidebar nav button>small){color:var(--mosque-bright)}
+/* Ranks, attendance states and the original logos retain their own meaningful colors. */

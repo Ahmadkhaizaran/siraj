@@ -15,6 +15,7 @@ import StudentHome from '../components/student-home';
 import HadithCard from '../components/hadith-card';
 import DateClock from '../components/date-clock';
 import MosqueLogo from '../components/mosque-logo';
+import useMosqueTheme from '../components/use-mosque-theme';
 import { ENTITY_KINDS,type EntityKind } from '../lib/entity-kinds';
 import { officialMosqueLogo } from '../lib/mosque-branding';
 import CommunityCalendar,{useCommunityFeed,CommunityNotices} from '../components/community-calendar';
@@ -46,6 +47,7 @@ export default function Page(){
  useEffect(()=>{if(mode==='app'&&data)load(mid,date)},[mid,date]);
  useEffect(()=>{setDraft({})},[data?.attendance,date]);
  const user=data?.user;const admin=['admin','platform_supervisor'].includes(user?.role),manager=admin||user?.role==='primary',teacher=user?.role==='teacher';const mosque=data?.mosques.find(m=>m.id===mid)||(admin?undefined:data?.mosques[0]);
+ useMosqueTheme(mosque?.name,mosque?.logo,mode==='app'&&!admin);
  const visibleAccounts=(admin?data?.accounts||[]:data?.staff||[]).filter(a=>!admin||!accountFilter||a.mosque_id===accountFilter);
  const activeStudents=data?.students.filter(s=>s.status==='active')||[];
  const filteredStudents=(data?.students||[]).filter(s=>(!circleFilter||s.circle_id===circleFilter||s.circle_ids?.includes(circleFilter))&&(!search||s.name.includes(search)||s.circle_name?.includes(search)||s.student_code?.toUpperCase().includes(search.toUpperCase())));
