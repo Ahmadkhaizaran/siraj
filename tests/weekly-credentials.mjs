@@ -115,5 +115,18 @@ await teacher('circle-session',{...payload,revision:1},'POST',403);
 assert.equal(Number((await database.prepare('SELECT SUM(points) AS n FROM motivational_scores WHERE student_id=?').bind(sid.id).first()).n),30);
 await boss('circle-schedule',{mosque_id:mid,circle_id:cid,schedule:{weekday,mode:'clock',time:'00:00'}});
 await teacher('circle-session',{...payload,revision:1},'POST',403);
+
+await boss('administration/cancel',{kind:'account',action:'cancel',id:lead.id},'POST',403);
+await boss('administration/cancel',{kind:'account',action:'cancel',id:otherLead.id},'POST',403);
+await boss('administration/cancel',{kind:'mosque',action:'cancel',id:mid},'POST',403);
+await supervisor('administration/cancel',{kind:'account',action:'cancel',id:staff.id},'POST',403);
+await teacher('administration/cancel',{kind:'account',action:'cancel',id:supervisorAccount.id},'POST',403);
+await boss('administration/cancel',{kind:'account',action:'restore',id:staff.id},'POST',403);
+await boss('administration/cancel',{kind:'account',action:'cancel',id:staff.id});
+await teacher('data',undefined,'GET',401);
+await client()('auth/login',staff.credentials,'POST',401);
+assert.ok(!(await boss('data')).staff.some(a=>a.id===staff.id));
+assert.ok((await database.prepare('SELECT id FROM circles WHERE id=?').bind(cid).first()).id);
+assert.equal(Number((await database.prepare('SELECT SUM(points) AS n FROM motivational_scores WHERE student_id=?').bind(sid.id).first()).n),30);
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}

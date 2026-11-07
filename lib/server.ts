@@ -192,13 +192,15 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    return json(unread);
   }
   if(path==='administration/cancel'&&method==='POST'){
-   if(!isAdmin)fail(403,'إلغاء الجهات والحسابات من صلاحيات مدير المنصّة فقط');
+   if(!isAdmin&&user.role!=='primary')fail(403,'حذف الحسابات من صلاحيات المشرف الأساسي أو مدير المنصّة');
+   if(!isAdmin&&(body.kind!=='account'||body.action!=='cancel'))fail(403,'يمكنك حذف حسابات فريق جهتك فقط');
    const targetId=text(body.id,'العنصر',80),kind=body.kind,action=body.action;
    if(!['account','mosque'].includes(kind)||!['cancel','restore'].includes(action))fail(400,'عملية غير صالحة');
    const stamp=action==='cancel'?now():null;
    if(kind==='account'){
     const target=await one('SELECT * FROM users WHERE id=?',targetId);
     if(!target||target.id===user.id||!['primary','supervisor','teacher',...(isOwner?['platform_supervisor']:[])].includes(target.role))fail(403,'لا يمكنك إلغاء هذا الحساب');
+    if(!isAdmin&&target.mosque_id!==user.mosque_id)fail(403,'يمكنك حذف حسابات فريق جهتك فقط');
     if(target.mosque_id)await mosqueExists(target.mosque_id);
     await db.batch([q('UPDATE users SET cancelled_at=? WHERE id=?',stamp,targetId),q('DELETE FROM sessions WHERE user_id=?',targetId),audit(target.mosque_id,(stamp?'أُلغي حساب ':'أُعيد حساب ')+target.name)]);
    }else{
