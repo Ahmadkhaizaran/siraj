@@ -4,6 +4,8 @@
  */
 export type Hadith={id:string;topic:string;text:string;collection:'صحيح البخاري'|'صحيح مسلم';reference:string;book:string;url:string;excerpt?:boolean};
 export const HADITHS:Hadith[]=[
+{id:'m657',topic:'فضل صلاة الفجر',text:'مَنْ صَلَّى الصُّبْحَ فَهُوَ فِي ذِمَّةِ اللَّهِ.',collection:'صحيح مسلم',reference:'657a',book:'كتاب المساجد ومواضع الصلاة',url:'https://sunnah.com/muslim:657a',excerpt:true},
+{id:'m725',topic:'فضل سنّة الفجر',text:'رَكْعَتَا الْفَجْرِ خَيْرٌ مِنَ الدُّنْيَا وَمَا فِيهَا.',collection:'صحيح مسلم',reference:'725a',book:'كتاب صلاة المسافرين وقصرها',url:'https://sunnah.com/muslim:725a'},
 {id:'b5027',topic:'تعلّم القرآن وتعليمه',text:'خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ.',collection:'صحيح البخاري',reference:'5027',book:'كتاب فضائل القرآن',url:'https://sunnah.com/bukhari:5027'},
 {id:'m2699-circles',topic:'فضل مجالس القرآن',text:'وَمَا اجْتَمَعَ قَوْمٌ فِي بَيْتٍ مِنْ بُيُوتِ اللَّهِ يَتْلُونَ كِتَابَ اللَّهِ وَيَتَدَارَسُونَهُ بَيْنَهُمْ، إِلَّا نَزَلَتْ عَلَيْهِمُ السَّكِينَةُ، وَغَشِيَتْهُمُ الرَّحْمَةُ، وَحَفَّتْهُمُ الْمَلَائِكَةُ، وَذَكَرَهُمُ اللَّهُ فِيمَنْ عِنْدَهُ.',collection:'صحيح مسلم',reference:'2699a',book:'كتاب الذكر والدعاء والتوبة والاستغفار',url:'https://sunnah.com/muslim:2699a',excerpt:true},
 {id:'m2699-knowledge',topic:'فضل طلب العلم',text:'وَمَنْ سَلَكَ طَرِيقًا يَلْتَمِسُ فِيهِ عِلْمًا، سَهَّلَ اللَّهُ لَهُ بِهِ طَرِيقًا إِلَى الْجَنَّةِ.',collection:'صحيح مسلم',reference:'2699a',book:'كتاب الذكر والدعاء والتوبة والاستغفار',url:'https://sunnah.com/muslim:2699a',excerpt:true},
