@@ -18,3 +18,4 @@ html[data-mosque-theme] :is(.sidebar-note strong,.breadcrumb strong,.sidebar nav
 html[data-mosque-theme] .sidebar nav button.active{color:var(--green)}
 html[data-mosque-theme][data-theme=dark] :is(.text-button,.eyebrow,.hello-leaf,.circle-icon,.empty-icon,.student-home-brand,.sidebar nav button.active,.nav-extra.active,.student-tabs button.active,.badge.green,.sidebar nav button>small){color:var(--mosque-bright)}
 /* Ranks, attendance states and the original logos retain their own meaningful colors. */
+html[data-mosque-theme] :is(.mosque-icon,.mosque-card-icon,.source-mosque-icon,.event-mosque-logo,.detail-mosque-logo,.logo-upload>span):has(.original-mosque-logo){background:#fff}
