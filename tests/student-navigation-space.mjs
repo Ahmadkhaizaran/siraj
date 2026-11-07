@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import vm from 'node:vm';
+const require=createRequire(import.meta.resolve('wrangler/package.json'));
+const {outputFiles}=await require('esbuild').build({entryPoints:['components/use-student-navigation-space.ts'],bundle:true,write:false,platform:'node',format:'cjs',external:['react']});
+let cleanup,observer,resize,height=82.4,writes=0,disconnected=false;
+const values=new Map(),root={style:{getPropertyValue:key=>values.get(key)||'',setProperty:(key,value)=>{writes++;values.set(key,value)},removeProperty:key=>values.delete(key)}},menu={getBoundingClientRect:()=>({height})};
+class Observer{constructor(fn){observer=fn}observe(el){assert.equal(el,menu)}disconnect(){disconnected=true}}
+const module={exports:{}};
+const window={addEventListener:(event,fn,opts)=>{assert.equal(event,'resize');assert.equal(opts.passive,true);resize=fn},removeEventListener:(event,fn)=>{assert.equal(fn,resize);resize=null}};
+vm.runInNewContext(outputFiles[0].text,{module,exports:module.exports,window,ResizeObserver:Observer,require:id=>{assert.equal(id,'react');return {useEffect:fn=>{cleanup=fn()}}}});
+module.exports.default({current:root},{current:menu});
+assert.equal(values.get('--student-nav-height'),'83px','Footer measurement must include its full rendered height');
+const firstWrites=writes;observer();assert.equal(writes,firstWrites,'Unchanged size must not cause resize or layout feedback');
+height=125.2;observer();assert.equal(values.get('--student-nav-height'),'126px','Wrapped or zoomed labels reserve additional space');
+height=101;resize();assert.equal(values.get('--student-nav-height'),'101px','Orientation and safe-area changes update the reserve');
+height=0;observer();assert.equal(values.get('--student-nav-height'),'101px','Transient zero-sized measurements must not collapse the reserve');
+cleanup();assert.ok(disconnected);assert.equal(resize,null);assert.ok(!values.has('--student-nav-height'));
+values.set('--student-nav-height','90px');module.exports.default({current:root},{current:menu});cleanup();assert.equal(values.get('--student-nav-height'),'90px');
+console.log('PASS: footer size, wrapped labels, orientation changes, stable resize notifications and cleanup');
