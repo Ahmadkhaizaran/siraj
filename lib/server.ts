@@ -1,3 +1,4 @@
+import {studentCertificates} from './student-certificates';
 import {supervisionReport} from './supervision-report';
 import {individualRecitation} from './individual-recitation';
 import {sealStudentPassword,openStudentPassword,readablePassword} from './credential-vault';
@@ -137,6 +138,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   const studentAccess=async(sid:string,mid:string)=>{if(isStudent&&sid!==user.student_id)fail(403,'يمكنك عرض ملفّك فقط');const s=await one("SELECT * FROM students WHERE id=? AND mosque_id=? AND status!='deleted'",sid,mid);if(!s)fail(404,'الطالب غير موجود في هذا المسجد أو المركز');if(isTeacher&&!await one("SELECT c.id FROM circles c WHERE c.mosque_id=? AND c.teacher_id=? AND c.status='active' AND (c.id=? OR EXISTS (SELECT 1 FROM circle_enrollments ce WHERE ce.circle_id=c.id AND ce.student_id=?))",mid,user.id,s!.circle_id,sid))fail(403,'الطالب غير مسند إلى حلقتك');return s!;};
   const audit=(mid:string|null,message:string)=>q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',id(),mid,user.id,message,now());
   const params=new URL(req.url).searchParams;
+  if(path==='student-certificates')return await studentCertificates({user,method,body,params,scope,studentAccess,mosqueExists,rows,one,q,fail,json,audit});
   if(path==='supervision-report')return await supervisionReport({user,params,method,scope,mosqueExists,rows,fail,json});
   if(path==='individual-recitation')return await individualRecitation({db,user,body,params,method,fail,json,mosqueExists,text});
   if(path==='student-credentials'&&['GET','POST'].includes(method)){
@@ -407,8 +409,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    return json({ok:true,id:sid,credentials},method==='POST'?201:200);
   }
   if(path==='student-account'&&method==='POST'){
-   if(isAdmin||!['primary','supervisor','teacher'].includes(user.role))fail(403,'بيانات دخول الطالب من صلاحيات فريق تعليم الجهة');
-   if(body.action!=='reveal'&&!manager&&!isTeacher)fail(403,'تجديد بيانات الطالب من صلاحيات المشرف الأساسي');
+   if(!['primary','supervisor'].includes(user.role))fail(403,'بيانات دخول الطالب من صلاحيات المشرف والمشرف الأساسي فقط');
    const mid=scope(body.mosque_id),sid=text(body.student_id,'الطالب',80),student=await studentAccess(sid,mid);
    if(body.action==='reveal'){
     await throttle('student-recovery:'+user.id,30);
@@ -464,7 +465,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const mid=scope(method==='GET'?params.get('mosque'):body.mosque_id),sid=text(method==='GET'?params.get('student_id'):body.student_id,'الطالب',80);await studentAccess(sid,mid);await mosqueExists(mid);
    if(method==='GET'){
     const records:Row[]=(await rows("SELECT ms.*,u.name AS teacher_name,cs.circle_id,c.name AS circle_name,cr.status AS attendance_status FROM motivational_scores ms LEFT JOIN users u ON u.id=ms.updated_by LEFT JOIN circle_sessions cs ON ms.meeting='circle:'||cs.circle_id AND ms.day=cs.day LEFT JOIN circle_records cr ON cr.session_id=cs.id AND cr.student_id=ms.student_id LEFT JOIN circles c ON c.id=cs.circle_id WHERE ms.student_id=? ORDER BY ms.day DESC,ms.meeting",sid)).map(r=>({...r,meeting:r.circle_name?'لقاء '+r.circle_name:r.meeting}));
-    const points=records.reduce((n,r)=>n+Number(r.points),0);return json({records,points,rank:rankFor(points),student:await one('SELECT id,name FROM students WHERE id=?',sid),mosque:await one('SELECT name,logo FROM mosques WHERE id=?',mid)});
+    const points=records.reduce((n,r)=>n+Number(r.points),0);return json({certificate_access:['primary','supervisor'].includes(user.role)?'manage':isStudent?'student':'none',records,points,rank:rankFor(points),student:await one('SELECT id,name FROM students WHERE id=?',sid),mosque:await one('SELECT name,logo FROM mosques WHERE id=?',mid)});
    }
    fail(400,'سجّل التقييم من لقاء الحلقة في قسم حلقاتي؛ ملف الطالب يعرض سجله فقط');
   }

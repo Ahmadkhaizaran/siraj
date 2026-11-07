@@ -66,8 +66,9 @@ await admin('student-credentials',{id:otherAccount.id},'POST',409);
 await otherBoss('auth/login',otherLead.credentials);
 const oldStudent=client();await oldStudent('auth/login',otherStudent.credentials);
 
-assert.equal((await teacher('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'})).credentials.password,sid.credentials.password);
-const teacherReset=await teacher('student-account',{mosque_id:mid,student_id:sid.id});
+await teacher('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'},'POST',403);
+await teacher('student-account',{mosque_id:mid,student_id:sid.id},'POST',403);
+const teacherReset=await boss('student-account',{mosque_id:mid,student_id:sid.id});
 Object.assign(recovered.credentials,teacherReset.credentials);
 await pupil('auth/login',recovered.credentials);
 await pupil('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'},'POST',403);
@@ -82,7 +83,7 @@ const supervisor=client(),supervisorAccount=await boss('users',{mosque_id:mid,na
 await supervisor('auth/login',supervisorAccount.credentials);
 assert.equal((await supervisor('staff-credentials',{id:staff.id})).credentials.password,staff.credentials.password);
 assert.equal((await supervisor('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'})).credentials.password,recovered.credentials.password);
-await supervisor('student-account',{mosque_id:mid,student_id:sid.id},'POST',403);
+assert.ok((await supervisor('student-account',{mosque_id:mid,student_id:otherStudent.id},'POST',404)).error);
 for(const actor of [boss,teacher,supervisor]){
  await actor('staff-credentials',{id:otherLead.id},'POST',403);
  await actor('staff-credentials',{id:generated.id},'POST',403);
@@ -196,5 +197,24 @@ await reportClient('circle-session',{mosque_id:mid,circle_id:excuseCircle,date:t
 const excuseSummary=(await boss('supervision-report?mosque='+mid)).students.find(s=>s.id===sid.id);
 assert.equal(excuseSummary.counts.excused,1);
 assert.ok(excuseSummary.history.some(r=>r.status==='excused'&&r.reason==='موعد طبي'));
+
+assert.ok((await supervisor('student-account',{mosque_id:mid,student_id:unassigned.id})).credentials.password);
+await reportClient('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'},'POST',403);
+await reportClient('student-account',{mosque_id:mid,student_id:sid.id},'POST',403);
+assert.equal((await reportClient('motivation?mosque='+mid+'&student_id='+sid.id)).certificate_access,'none');
+await reportClient('student-certificates?mosque='+mid+'&student_id='+sid.id,undefined,'GET',403);
+await reportClient('student-certificates',{mosque_id:mid,student_id:sid.id,index:0},'POST',403);
+assert.deepEqual((await pupil('student-certificates?mosque='+mid+'&student_id='+sid.id)).awards,[]);
+await pupil('student-certificates',{mosque_id:mid,student_id:sid.id,index:0},'POST',403);
+await otherBoss('student-certificates',{mosque_id:mid,student_id:sid.id,index:0},'POST',403);
+await supervisor('student-certificates',{mosque_id:mid,student_id:sid.id,index:6},'POST',400);
+await supervisor('student-certificates',{mosque_id:mid,student_id:sid.id,index:0});
+const certificate=(await pupil('student-certificates?mosque='+mid+'&student_id='+sid.id)).awards[0];
+assert.equal(certificate.index,0);assert.equal(certificate.snapshot.student.name,'طالب اختبار');
+assert.equal(certificate.snapshot.points,30);
+await boss('student-certificates',{mosque_id:mid,student_id:sid.id,index:0});
+assert.equal((await pupil('student-certificates?mosque='+mid+'&student_id='+sid.id)).awards.length,1);
+assert.equal((await pupil('student-certificates?mosque='+mid+'&student_id='+sid.id)).awards[0].issued_at,certificate.issued_at);
+await pupil('student-certificates?mosque='+otherMosque+'&student_id='+otherStudent.id,undefined,'GET',403);
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}
