@@ -470,7 +470,9 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const mid=scope(params.get('mosque')||user.mosque_id),sid=text(params.get('student_id'),'الطالب',80);await studentAccess(sid,mid);
    const memory=await rows('SELECT surah,ranges,revision,updated_at FROM memorization WHERE student_id=? ORDER BY surah',sid);
    const evaluations=await rows('SELECT a.*,u.name AS teacher_name FROM assessments a LEFT JOIN users u ON u.id=a.created_by WHERE a.student_id=? ORDER BY a.day DESC,a.created_at DESC',sid);
-   return json({memory:memory.map(m=>({...m,ranges:JSON.parse(m.ranges)})),assessments:evaluations});
+   const circles=await rows("SELECT c.id,c.name,c.schedule,u.name AS teacher_name,u.phone AS teacher_phone FROM circles c LEFT JOIN users u ON u.id=c.teacher_id AND u.active=1 AND u.cancelled_at IS NULL WHERE c.mosque_id=? AND c.status='active' AND (c.id=(SELECT circle_id FROM students WHERE id=?) OR EXISTS (SELECT 1 FROM circle_enrollments ce WHERE ce.circle_id=c.id AND ce.student_id=?)) ORDER BY c.name",mid,sid,sid);
+   const encounters=await rows("SELECT cs.day,c.name AS circle_name,cr.status FROM circle_records cr JOIN circle_sessions cs ON cs.id=cr.session_id JOIN circles c ON c.id=cs.circle_id WHERE cr.student_id=? AND c.mosque_id=? ORDER BY cs.day DESC,c.name LIMIT 30",sid,mid);
+   return json({circles,encounters,memory:memory.map(m=>({...m,ranges:JSON.parse(m.ranges)})),assessments:evaluations});
   }
   if(path==='memorization'&&method==='POST'){
    const mid=scope(body.mosque_id),sid=text(body.student_id,'الطالب',80);await studentAccess(sid,mid);

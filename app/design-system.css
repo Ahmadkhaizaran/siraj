@@ -45,3 +45,5 @@ html{min-height:100%;height:auto;overflow-y:scroll;scrollbar-gutter:stable}body{
 .student-home .siraj-helper{bottom:calc(100px + env(safe-area-inset-bottom,0px))}
 
 .student-home .helper-docked .helper-panel{bottom:calc(100px + env(safe-area-inset-bottom,0px));max-height:calc(100dvh - 120px - env(safe-area-inset-bottom,0px))}
+
+.student-achievement-circles .panel{padding:20px}.student-race-spotlight{margin-block:24px;padding:20px;border:1px solid var(--line);border-radius:16px;background:var(--sage)}.student-race-spotlight .top-student-card{background:var(--white)}

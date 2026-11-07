@@ -168,5 +168,10 @@ await pupil('individual-recitation?mosque='+mid,undefined,'GET',403);
 await platform('individual-recitation?mosque='+mid,undefined,'GET',403);
 await boss('individual-recitation',{mosque_id:otherMosque,action:'delete',id:slot.id},'POST',403);
 await boss('individual-recitation',{mosque_id:mid,action:'save',student_id:sid.id,teacher_id:lead.id,weekday:3,minute:1080,duration:15});
+
+const ownProfile=await pupil('student-profile?mosque='+mid+'&student_id='+sid.id);
+assert.ok(ownProfile.circles.some(c=>c.id===cid));
+assert.ok(ownProfile.encounters.every(e=>e.circle_name));
+await pupil('student-profile?mosque='+otherMosque+'&student_id='+otherStudent.id,undefined,'GET',403);
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}
