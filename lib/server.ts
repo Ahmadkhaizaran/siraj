@@ -134,6 +134,18 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   const studentAccess=async(sid:string,mid:string)=>{if(isStudent&&sid!==user.student_id)fail(403,'يمكنك عرض ملفّك فقط');const s=await one("SELECT * FROM students WHERE id=? AND mosque_id=? AND status!='deleted'",sid,mid);if(!s)fail(404,'الطالب غير موجود في هذا المسجد أو المركز');if(isTeacher&&!await one("SELECT c.id FROM circles c WHERE c.mosque_id=? AND c.teacher_id=? AND c.status='active' AND (c.id=? OR EXISTS (SELECT 1 FROM circle_enrollments ce WHERE ce.circle_id=c.id AND ce.student_id=?))",mid,user.id,s!.circle_id,sid))fail(403,'الطالب غير مسند إلى حلقتك');return s!;};
   const audit=(mid:string|null,message:string)=>q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',id(),mid,user.id,message,now());
   const params=new URL(req.url).searchParams;
+  if(path==='student-credentials'&&['GET','POST'].includes(method)){
+   if(!isOwner)fail(403,'حسابات طلاب جميع الجهات من صلاحيات صاحب المنصّة فقط');
+   if(method==='GET')return json({accounts:await rows("SELECT u.id,u.student_id,u.username,s.name,s.contact_mode,m.name AS mosque_name,m.id AS mosque_id,CASE WHEN v.key IS NULL THEN 0 ELSE 1 END AS recoverable FROM users u JOIN students s ON s.id=u.student_id JOIN mosques m ON m.id=u.mosque_id LEFT JOIN settings v ON v.key='student-credential:'||u.student_id WHERE u.role='student' AND u.cancelled_at IS NULL AND s.status!='deleted' AND m.cancelled_at IS NULL ORDER BY m.name,s.name")});
+   await throttle('student-recovery:'+user.id,30);
+   const account=await one("SELECT u.username,u.password_hash,u.student_id,s.name,s.contact_mode,u.mosque_id FROM users u JOIN students s ON s.id=u.student_id JOIN mosques m ON m.id=u.mosque_id WHERE u.id=? AND u.role='student' AND u.cancelled_at IS NULL AND s.status!='deleted' AND m.cancelled_at IS NULL",text(body.id,'الحساب',80));
+   if(!account)fail(404,'حساب الطالب غير موجود');
+   const saved=await one('SELECT value FROM settings WHERE key=?','student-credential:'+account.student_id);
+   if(!saved)fail(409,'كلمة السر القديمة لم تُحفظ للاسترجاع. يستطيع المشرف الأساسي تجديدها من ملف الطالب دون فقدان سجله.');
+   let secret='';try{secret=await openStudentPassword(account.student_id,account.password_hash,saved.value,pepper())}catch{fail(409,'تعذّر استرجاع كلمة السر المحفوظة؛ راجع المشرف الأساسي لتجديدها.');}
+   await audit(account.mosque_id,'استرجع صاحب المنصّة بيانات دخول الطالب '+account.name).run();
+   return json({credentials:{name:account.name,username:account.username.toUpperCase(),password:secret,contact_mode:account.contact_mode}});
+  }
   if(path==='staff-credentials'&&method==='POST'){
    if(!isOwner)fail(403,'نسخ بيانات حسابات الفريق من صلاحيات صاحب المنصّة فقط');
    await throttle('staff-recovery:'+user.id,30);
