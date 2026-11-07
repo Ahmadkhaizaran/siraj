@@ -67,11 +67,13 @@ await otherBoss('auth/login',otherLead.credentials);
 const oldStudent=client();await oldStudent('auth/login',otherStudent.credentials);
 
 assert.equal((await teacher('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'})).credentials.password,sid.credentials.password);
-await teacher('student-account',{mosque_id:mid,student_id:sid.id},'POST',403);
+const teacherReset=await teacher('student-account',{mosque_id:mid,student_id:sid.id});
+Object.assign(recovered.credentials,teacherReset.credentials);
+await pupil('auth/login',recovered.credentials);
 await pupil('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'},'POST',403);
-await pupil('auth/password',{current_password:recovered.credentials.password,new_password:'StudentNew123!'});
-assert.equal((await boss('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'})).credentials.password,'StudentNew123!');
-const enc=await database.prepare('SELECT value FROM settings WHERE key=?').bind('student-credential:'+sid.id).first();assert.ok(!enc.value.includes('StudentNew123!'));
+await pupil('auth/password',{current_password:recovered.credentials.password,new_password:recovered.credentials.password},'POST',403);
+assert.equal((await boss('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'})).credentials.password,recovered.credentials.password);
+const enc=await database.prepare('SELECT value FROM settings WHERE key=?').bind('student-credential:'+sid.id).first();assert.ok(!enc.value.includes(recovered.credentials.password));
 assert.equal((await admin('staff-credentials',{id:lead.id})).credentials.password,lead.credentials.password);
 assert.equal((await boss('staff-credentials',{id:lead.id})).credentials.password,lead.credentials.password);
 assert.equal((await teacher('staff-credentials',{id:staff.id})).credentials.password,staff.credentials.password);
@@ -79,7 +81,7 @@ assert.equal((await teacher('staff-credentials',{id:lead.id})).credentials.passw
 const supervisor=client(),supervisorAccount=await boss('users',{mosque_id:mid,name:'مشرف تجريبي',english_name:'Test Supervisor',phone:'70000003',role:'supervisor',auto_credentials:true},'POST',201);
 await supervisor('auth/login',supervisorAccount.credentials);
 assert.equal((await supervisor('staff-credentials',{id:staff.id})).credentials.password,staff.credentials.password);
-assert.equal((await supervisor('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'})).credentials.password,'StudentNew123!');
+assert.equal((await supervisor('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'})).credentials.password,recovered.credentials.password);
 await supervisor('student-account',{mosque_id:mid,student_id:sid.id},'POST',403);
 for(const actor of [boss,teacher,supervisor]){
  await actor('staff-credentials',{id:otherLead.id},'POST',403);
@@ -130,7 +132,7 @@ assert.ok((await database.prepare('SELECT id FROM circles WHERE id=?').bind(cid)
 assert.equal(Number((await database.prepare('SELECT SUM(points) AS n FROM motivational_scores WHERE student_id=?').bind(sid.id).first()).n),30);
 
 await platform('auth/login',{username:'sj.renamed',password:'PlatformNew123!'});
-await pupil('auth/login',{username:recovered.credentials.username,password:'StudentNew123!'});
+await pupil('auth/login',{username:recovered.credentials.username,password:recovered.credentials.password});
 for(const actor of [boss,supervisor,platform,pupil])await actor('individual-recitation?mosque='+mid,undefined,'GET',403);
 const betaBefore=await admin('individual-recitation?mosque='+mid);assert.equal(betaBefore.slots.length,0);
 await admin('individual-recitation',{mosque_id:mid,action:'save',student_id:sid.id,teacher_id:lead.id,weekday:1,minute:1080});

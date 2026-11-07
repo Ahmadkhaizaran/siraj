@@ -127,7 +127,8 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   if(path==='calendar'&&method==='GET')return json(await communityFeed(db,user));
   const isOwner=user.role==='admin',isAdmin=['admin','platform_supervisor'].includes(user.role),manager=isAdmin||user.role==='primary',isTeacher=user.role==='teacher',isStudent=user.role==='student';
   if(isStudent&&path==='export')fail(403,'تصدير بيانات الجهة متاح لإدارتها فقط');
-  if(isStudent&&write&&!['auth/password','calendar/seen'].includes(path))fail(403,'حساب الطالب للعرض فقط');
+  if(isStudent&&path==='auth/password')fail(403,'تغيير كلمة سر الطالب من صلاحيات المعلّم أو المشرف الأساسي فقط');
+  if(isStudent&&write&&!['calendar/seen'].includes(path))fail(403,'حساب الطالب للعرض فقط');
   if(isAdmin&&['students','circles','attendance','progress','export','student-profile','memorization','assessments','student-account','motivation','circle-session','circle-enrollments','circle-schedule'].includes(path))fail(403,'المتابعة التعليمية من صلاحيات إدارة المسجد أو المركز ومدرّسيه');
   const scope=(mosque:unknown)=>{const mid=text(mosque,'المسجد',80);if(!isAdmin&&mid!==user.mosque_id)fail(403,'ليس لديك صلاحية الوصول إلى هذا المسجد أو المركز');return mid;};
   const mosqueExists=async(mid:string)=>{if(!await one('SELECT id FROM mosques WHERE id=? AND cancelled_at IS NULL',mid))fail(404,'المسجد أو المركز غير موجود');};
@@ -272,7 +273,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    if(!mid)fail(400,'اختر المسجد أو المركز');
    if(isStudent){
     const self=await studentAccess(user.student_id||'',mid);
-    const own=await one("SELECT s.id,s.name,s.age,s.status,s.nationality,s.quran_level,s.joined_on,s.created_at,s.circle_id,c.name AS circle_name,t.name AS teacher_name,t.phone AS teacher_phone,'SRG-'||n.number AS student_code FROM students s LEFT JOIN circles c ON c.id=s.circle_id LEFT JOIN users t ON t.id=c.teacher_id AND t.active=1 AND t.cancelled_at IS NULL LEFT JOIN student_codes n ON n.student_id=s.id WHERE s.id=?",self.id);
+    const own=await one("SELECT s.id,s.name,s.age,s.contact,s.contact_mode,s.status,s.nationality,s.quran_level,s.joined_on,s.created_at,s.circle_id,c.name AS circle_name,t.name AS teacher_name,t.phone AS teacher_phone,'SRG-'||n.number AS student_code FROM students s LEFT JOIN circles c ON c.id=s.circle_id LEFT JOIN users t ON t.id=c.teacher_id AND t.active=1 AND t.cancelled_at IS NULL LEFT JOIN student_codes n ON n.student_id=s.id WHERE s.id=?",self.id);
     return json({user,mosques,mosque_id:mid,students:[own],circles:[],staff:[],attendance:[],progress:[],activity:[],date:day});
    }
    const teacherWhere=isTeacher?' AND c.teacher_id=?':'';
@@ -405,7 +406,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   }
   if(path==='student-account'&&method==='POST'){
    if(isAdmin||!['primary','supervisor','teacher'].includes(user.role))fail(403,'بيانات دخول الطالب من صلاحيات فريق تعليم الجهة');
-   if(body.action!=='reveal'&&!manager)fail(403,'تجديد بيانات الطالب من صلاحيات المشرف الأساسي');
+   if(body.action!=='reveal'&&!manager&&!isTeacher)fail(403,'تجديد بيانات الطالب من صلاحيات المشرف الأساسي');
    const mid=scope(body.mosque_id),sid=text(body.student_id,'الطالب',80),student=await studentAccess(sid,mid);
    if(body.action==='reveal'){
     await throttle('student-recovery:'+user.id,30);
