@@ -15,10 +15,14 @@ export function beirutStart(day:string,minute:number){
 export function canExcuse(day:string,minute:number,now=Date.now()){return now<beirutStart(day,minute)-30*60000}
 export async function individualRecitation(ctx:any){
  const {db,user,body,params,method,fail,json,mosqueExists,text}=ctx;
- if(user.role!=='admin')fail(403,'التسميع الفردي تجربة خاصة بصاحب المنصّة فقط');
  const mid=text(method==='GET'?params.get('mosque'):body.mosque_id,'الجهة',80);await mosqueExists(mid);
  const q=(sql:string,...args:any[])=>db.prepare(sql).bind(...args);
  const rows=async(sql:string,...args:any[])=>(await q(sql,...args).all()).results||[];
+ if(user.role!=='admin'){
+  if(!['primary','supervisor'].includes(user.role)||user.mosque_id!==mid)fail(403,'ليس لديك صلاحية استخدام التسميع الفردي لهذه الجهة');
+  const enabled=await q('SELECT value FROM settings WHERE key=?','feature:individual-recitation:'+mid).first();
+  if(enabled?.value!=='enabled')fail(403,'التسميع الفردي غير مفعّل لهذه الجهة');
+ }
  const key='beta:individual-recitation:'+mid;
  const stored=await q('SELECT value FROM settings WHERE key=?',key).first();
  const state=stored?JSON.parse(stored.value):{slots:[],responses:{}};

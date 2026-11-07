@@ -154,5 +154,17 @@ assert.equal(durationSlots.find(s=>s.minute===1080).duration,15);
 await admin('individual-recitation',{mosque_id:mid,action:'save',student_id:sid.id,teacher_id:lead.id,weekday:1,minute:1094,duration:15},'POST',409);
 await admin('individual-recitation',{mosque_id:mid,action:'save',student_id:sid.id,teacher_id:lead.id,weekday:2,minute:1080,duration:0},'POST',409);
 await admin('individual-recitation',{mosque_id:mid,action:'save',id:durationSlots.find(s=>s.minute===1080).id,student_id:sid.id,teacher_id:lead.id,weekday:1,minute:1080,duration:30},'POST',409);
+
+assert.equal((await boss('data')).features.individual_recitation,false);
+await database.prepare('INSERT INTO settings (key,value) VALUES (?,?)').bind('feature:individual-recitation:'+mid,'enabled').run();
+assert.equal((await boss('data')).features.individual_recitation,true);
+await boss('individual-recitation?mosque='+mid);
+await supervisor('individual-recitation?mosque='+mid);
+await boss('individual-recitation?mosque='+otherMosque,undefined,'GET',403);
+await otherBoss('individual-recitation?mosque='+otherMosque,undefined,'GET',403);
+await pupil('individual-recitation?mosque='+mid,undefined,'GET',403);
+await platform('individual-recitation?mosque='+mid,undefined,'GET',403);
+await boss('individual-recitation',{mosque_id:otherMosque,action:'delete',id:slot.id},'POST',403);
+await boss('individual-recitation',{mosque_id:mid,action:'save',student_id:sid.id,teacher_id:lead.id,weekday:3,minute:1080,duration:15});
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}
