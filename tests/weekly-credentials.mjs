@@ -66,14 +66,29 @@ await admin('student-credentials',{id:otherAccount.id},'POST',409);
 await otherBoss('auth/login',otherLead.credentials);
 const oldStudent=client();await oldStudent('auth/login',otherStudent.credentials);
 
-await teacher('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'},'POST',403);
+assert.equal((await teacher('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'})).credentials.password,sid.credentials.password);
+await teacher('student-account',{mosque_id:mid,student_id:sid.id},'POST',403);
 await pupil('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'},'POST',403);
 await pupil('auth/password',{current_password:recovered.credentials.password,new_password:'StudentNew123!'});
 assert.equal((await boss('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'})).credentials.password,'StudentNew123!');
 const enc=await database.prepare('SELECT value FROM settings WHERE key=?').bind('student-credential:'+sid.id).first();assert.ok(!enc.value.includes('StudentNew123!'));
 assert.equal((await admin('staff-credentials',{id:lead.id})).credentials.password,lead.credentials.password);
-await boss('staff-credentials',{id:lead.id},'POST',403);
-await teacher('staff-credentials',{id:staff.id},'POST',403);
+assert.equal((await boss('staff-credentials',{id:lead.id})).credentials.password,lead.credentials.password);
+assert.equal((await teacher('staff-credentials',{id:staff.id})).credentials.password,staff.credentials.password);
+assert.equal((await teacher('staff-credentials',{id:lead.id})).credentials.password,lead.credentials.password);
+const supervisor=client(),supervisorAccount=await boss('users',{mosque_id:mid,name:'مشرف تجريبي',english_name:'Test Supervisor',phone:'70000003',role:'supervisor',auto_credentials:true},'POST',201);
+await supervisor('auth/login',supervisorAccount.credentials);
+assert.equal((await supervisor('staff-credentials',{id:staff.id})).credentials.password,staff.credentials.password);
+assert.equal((await supervisor('student-account',{mosque_id:mid,student_id:sid.id,action:'reveal'})).credentials.password,'StudentNew123!');
+await supervisor('student-account',{mosque_id:mid,student_id:sid.id},'POST',403);
+for(const actor of [boss,teacher,supervisor]){
+ await actor('staff-credentials',{id:otherLead.id},'POST',403);
+ await actor('staff-credentials',{id:generated.id},'POST',403);
+ await actor('student-account',{mosque_id:otherMosque,student_id:otherStudent.id,action:'reveal'},'POST',403);
+}
+const unassigned=await boss('students',{mosque_id:mid,name:'طالب غير مسند',english_name:'Unassigned Student'},'POST',201);
+await teacher('student-account',{mosque_id:mid,student_id:unassigned.id,action:'reveal'},'POST',403);
+assert.ok((await teacher('data')).staff.some(a=>a.id===lead.id&&a.username===lead.credentials.username));
 await platform('staff-credentials',{id:lead.id},'POST',403);
 await pupil('staff-credentials',{id:lead.id},'POST',403);
 await client()('staff-credentials',{id:lead.id},'POST',401);

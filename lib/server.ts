@@ -147,10 +147,11 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    return json({credentials:{name:account.name,username:account.username.toUpperCase(),password:secret,contact_mode:account.contact_mode}});
   }
   if(path==='staff-credentials'&&method==='POST'){
-   if(!isOwner)fail(403,'نسخ بيانات حسابات الفريق من صلاحيات صاحب المنصّة فقط');
+   if(!isOwner&&!['primary','supervisor','teacher'].includes(user.role))fail(403,'استرجاع حسابات الفريق متاح لصاحب المنصّة وفريق تعليم الجهة');
    await throttle('staff-recovery:'+user.id,30);
    const target=await one("SELECT id,name,username,password_hash,role,mosque_id,active FROM users WHERE id=? AND cancelled_at IS NULL",text(body.id,'الحساب',80));
    if(!target||!['primary','supervisor','teacher','platform_supervisor'].includes(target.role)||!target.active)fail(404,'الحساب غير متاح للاسترجاع');
+   if(!isOwner&&(!target.mosque_id||target.mosque_id!==user.mosque_id||!['primary','supervisor','teacher'].includes(target.role)))fail(403,'يمكنك استرجاع حسابات فريق التعليم في جهتك فقط');
    if(target.mosque_id)await mosqueExists(target.mosque_id);
    const saved=await one('SELECT value FROM settings WHERE key=?','staff-credential:'+target.id);
    if(!saved)fail(409,'الحساب قديم؛ عيّن كلمة سر جديدة واحفظها مرة واحدة لتفعيل نسخ بيانات الدخول');
@@ -287,7 +288,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const circleAttendance=await rows("SELECT cr.session_id||':'||cr.student_id AS id,c.mosque_id,cr.student_id,cs.day,cr.status,cr.updated_by AS created_by,c.id AS circle_id,c.name AS circle_name FROM circle_records cr JOIN circle_sessions cs ON cs.id=cr.session_id JOIN circles c ON c.id=cs.circle_id JOIN students s ON s.id=cr.student_id WHERE c.mosque_id=? AND s.status!='deleted'"+(isTeacher?" AND c.teacher_id=? AND c.status='active'":'')+(all?'':" AND cs.day>=date(?,'-45 days')"),mid,...(isTeacher?[user.id]:[]),...(all?[]:[day]));
    att.push(...circleAttendance);
    const ps=await rows("SELECT p.*,s.name AS student_name,u.name AS teacher_name FROM progress p JOIN students s ON s.id=p.student_id LEFT JOIN users u ON u.id=p.created_by WHERE p.mosque_id=? AND s.status!='deleted'"+(isTeacher?" AND p.student_id IN (SELECT s.id FROM students s JOIN circles c ON c.id=s.circle_id WHERE s.mosque_id=? AND c.teacher_id=? AND c.status='active')":'')+' ORDER BY p.day DESC,p.created_at DESC'+(all?'':' LIMIT 150'),...vargs);
-   const staff=isTeacher?await rows('SELECT id,name,role,phone,active,mosque_id FROM users WHERE id=?',user.id):await rows("SELECT id,name,english_name,username,role,phone,student_id,active,mosque_id,created_at FROM users WHERE mosque_id=? AND cancelled_at IS NULL AND role!='student' ORDER BY created_at",mid);
+   const staff=await rows("SELECT id,name,english_name,username,role,phone,student_id,active,mosque_id,created_at FROM users WHERE mosque_id=? AND cancelled_at IS NULL AND role!='student' ORDER BY created_at",mid);
    const act:Row[]=[]; // Staff membership and administrative activity are never exposed to institution users.
    return json({user,mosques,mosque_id:mid,circles:cs,students:ss,attendance:att,progress:ps,staff,activity:act,date:day,exported_at:all?now():undefined});
   }
@@ -398,7 +399,8 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    return json({ok:true,id:sid,credentials},method==='POST'?201:200);
   }
   if(path==='student-account'&&method==='POST'){
-   if(!manager||isAdmin)fail(403,'بيانات دخول الطالب من صلاحيات المشرف الأساسي');
+   if(isAdmin||!['primary','supervisor','teacher'].includes(user.role))fail(403,'بيانات دخول الطالب من صلاحيات فريق تعليم الجهة');
+   if(body.action!=='reveal'&&!manager)fail(403,'تجديد بيانات الطالب من صلاحيات المشرف الأساسي');
    const mid=scope(body.mosque_id),sid=text(body.student_id,'الطالب',80),student=await studentAccess(sid,mid);
    if(body.action==='reveal'){
     await throttle('student-recovery:'+user.id,30);
