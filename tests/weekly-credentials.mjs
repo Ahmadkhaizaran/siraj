@@ -128,5 +128,23 @@ await client()('auth/login',staff.credentials,'POST',401);
 assert.ok(!(await boss('data')).staff.some(a=>a.id===staff.id));
 assert.ok((await database.prepare('SELECT id FROM circles WHERE id=?').bind(cid).first()).id);
 assert.equal(Number((await database.prepare('SELECT SUM(points) AS n FROM motivational_scores WHERE student_id=?').bind(sid.id).first()).n),30);
+
+await platform('auth/login',{username:'sj.renamed',password:'PlatformNew123!'});
+await pupil('auth/login',{username:recovered.credentials.username,password:'StudentNew123!'});
+for(const actor of [boss,supervisor,platform,pupil])await actor('individual-recitation?mosque='+mid,undefined,'GET',403);
+const betaBefore=await admin('individual-recitation?mosque='+mid);assert.equal(betaBefore.slots.length,0);
+await admin('individual-recitation',{mosque_id:mid,action:'save',student_id:sid.id,teacher_id:lead.id,weekday:1,minute:1080});
+const beta=await admin('individual-recitation?mosque='+mid),slot=beta.slots[0];
+await admin('individual-recitation',{mosque_id:mid,action:'save',student_id:sid.id,teacher_id:lead.id,weekday:1,minute:1095},'POST',409);
+await admin('individual-recitation',{mosque_id:mid,action:'save',student_id:sid.id,teacher_id:lead.id,weekday:1,minute:1110});
+await admin('individual-recitation',{mosque_id:mid,action:'save',student_id:otherStudent.id,teacher_id:lead.id,weekday:1,minute:1200},'POST',400);
+await admin('individual-recitation',{mosque_id:mid,action:'respond',id:slot.id,day:'2030-01-07',status:'confirmed'});
+assert.equal((await admin('individual-recitation?mosque='+mid)).responses[slot.id+':2030-01-07'].status,'confirmed');
+await admin('individual-recitation',{mosque_id:mid,action:'respond',id:slot.id,day:'2030-01-07',status:'excused',reason:''},'POST',400);
+await admin('individual-recitation',{mosque_id:mid,action:'respond',id:slot.id,day:'2030-01-07',status:'excused',reason:'موعد طبي'});
+await admin('individual-recitation',{mosque_id:mid,action:'respond',id:slot.id,day:'2030-01-07',status:'confirmed'},'POST',409);
+assert.equal((await admin('individual-recitation?mosque='+mid)).responses[slot.id+':2030-01-14'],undefined);
+await admin('individual-recitation',{mosque_id:mid,action:'delete',id:slot.id});
+assert.equal((await admin('individual-recitation?mosque='+mid)).slots.length,1);
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}

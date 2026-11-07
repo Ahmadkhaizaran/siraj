@@ -37,3 +37,5 @@ html{min-height:100%;height:auto;overflow-y:scroll;scrollbar-gutter:stable}body{
 
 /* Separate education staff actions with the same button treatment as student recovery. */
 .staff-account-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px;min-width:240px;max-width:460px;padding-block:6px;white-space:normal}.staff-account-actions>.btn{min-height:44px;gap:8px;white-space:nowrap}.staff-account-actions>.error{flex-basis:100%;margin:0}.staff-account-actions>.danger-text{border-color:color-mix(in srgb,currentColor 30%,transparent)}
+
+.recitation-excused{color:#b42318;background:#fee4e2}html[data-theme="dark"] .recitation-excused{color:#fda29b;background:#4b1d25}

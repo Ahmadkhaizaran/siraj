@@ -1,3 +1,4 @@
+import {individualRecitation} from './individual-recitation';
 import {sealStudentPassword,openStudentPassword,readablePassword} from './credential-vault';
 import {circleSession} from './circle-sessions';
 import { defaultRuntime, type SirajRuntime } from './server-runtime';
@@ -134,6 +135,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   const studentAccess=async(sid:string,mid:string)=>{if(isStudent&&sid!==user.student_id)fail(403,'يمكنك عرض ملفّك فقط');const s=await one("SELECT * FROM students WHERE id=? AND mosque_id=? AND status!='deleted'",sid,mid);if(!s)fail(404,'الطالب غير موجود في هذا المسجد أو المركز');if(isTeacher&&!await one("SELECT c.id FROM circles c WHERE c.mosque_id=? AND c.teacher_id=? AND c.status='active' AND (c.id=? OR EXISTS (SELECT 1 FROM circle_enrollments ce WHERE ce.circle_id=c.id AND ce.student_id=?))",mid,user.id,s!.circle_id,sid))fail(403,'الطالب غير مسند إلى حلقتك');return s!;};
   const audit=(mid:string|null,message:string)=>q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',id(),mid,user.id,message,now());
   const params=new URL(req.url).searchParams;
+  if(path==='individual-recitation')return await individualRecitation({db,user,body,params,method,fail,json,mosqueExists,text});
   if(path==='student-credentials'&&['GET','POST'].includes(method)){
    if(!isOwner)fail(403,'حسابات طلاب جميع الجهات من صلاحيات صاحب المنصّة فقط');
    if(method==='GET')return json({accounts:await rows("SELECT u.id,u.student_id,u.username,s.name,s.contact_mode,m.name AS mosque_name,m.id AS mosque_id,CASE WHEN v.key IS NULL THEN 0 ELSE 1 END AS recoverable FROM users u JOIN students s ON s.id=u.student_id JOIN mosques m ON m.id=u.mosque_id LEFT JOIN settings v ON v.key='student-credential:'||u.student_id WHERE u.role='student' AND u.cancelled_at IS NULL AND s.status!='deleted' AND m.cancelled_at IS NULL ORDER BY m.name,s.name")});
