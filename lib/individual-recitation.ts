@@ -1,8 +1,10 @@
 import {beirutDay} from './islamic-calendar';
-export type Slot={id:string;student_id:string;teacher_id:string;weekday:number;minute:number};
+export type Slot={id:string;student_id:string;teacher_id:string;weekday:number;minute:number;duration?:number};
 export function validateSlot(slot:Slot,slots:Slot[]){
- if(!Number.isInteger(slot.weekday)||slot.weekday<0||slot.weekday>6||!Number.isInteger(slot.minute)||slot.minute<0||slot.minute>1410)throw Error('اختر يومًا ووقتًا صالحين؛ مدة اللقاء نصف ساعة');
- if(slots.some(s=>s.id!==slot.id&&s.weekday===slot.weekday&&(s.teacher_id===slot.teacher_id||s.student_id===slot.student_id)&&slot.minute<s.minute+30&&s.minute<slot.minute+30))throw Error('الموعد متداخل مع لقاء آخر للمعلّم أو الطالب. اختر وقتًا بعد انتهاء اللقاء السابق.');
+ const duration=slot.duration??30;
+ if(!Number.isInteger(duration)||duration<1||duration>1440)throw Error('مدة التسميع يجب أن تكون عددًا صحيحًا من الدقائق بين 1 و1440');
+ if(!Number.isInteger(slot.weekday)||slot.weekday<0||slot.weekday>6||!Number.isInteger(slot.minute)||slot.minute<0||slot.minute+duration>1440)throw Error('اختر وقتًا صالحًا؛ يجب أن ينتهي اللقاء ضمن اليوم نفسه');
+ if(slots.some(s=>s.id!==slot.id&&s.weekday===slot.weekday&&(s.teacher_id===slot.teacher_id||s.student_id===slot.student_id)&&slot.minute<s.minute+(s.duration??30)&&s.minute<slot.minute+duration))throw Error('الموعد متداخل مع لقاء آخر للمعلّم أو الطالب. اختر وقتًا بعد انتهاء اللقاء السابق.');
 }
 export function beirutStart(day:string,minute:number){
  const target=Date.parse(day+'T00:00:00Z')+minute*60000;let result=target;
@@ -25,7 +27,7 @@ export async function individualRecitation(ctx:any){
  if(method==='GET')return json({...state,students,teachers,today:beirutDay()});
  if(method!=='POST')fail(405,'العملية غير متاحة');
  if(body.action==='save'){
-  const slot:Slot={id:body.id?text(body.id,'الموعد',80):crypto.randomUUID(),student_id:text(body.student_id,'الطالب',80),teacher_id:text(body.teacher_id,'المعلّم',80),weekday:Number(body.weekday),minute:Number(body.minute)};
+  const slot:Slot={id:body.id?text(body.id,'الموعد',80):crypto.randomUUID(),student_id:text(body.student_id,'الطالب',80),teacher_id:text(body.teacher_id,'المعلّم',80),weekday:Number(body.weekday),minute:Number(body.minute),duration:body.duration==null?30:Number(body.duration)};
   if(body.id&&!state.slots.some((s:Slot)=>s.id===slot.id))fail(404,'الموعد غير موجود');
   if(!students.some((s:any)=>s.id===slot.student_id)||!teachers.some((t:any)=>t.id===slot.teacher_id))fail(400,'اختر طالبًا ومعلّمًا من الجهة نفسها');
   if(!teachers.find((t:any)=>t.id===slot.teacher_id)?.phone)fail(400,'أضف رقم هاتف المعلّم إلى حسابه أولًا');

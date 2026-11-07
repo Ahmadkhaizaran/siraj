@@ -146,5 +146,13 @@ await admin('individual-recitation',{mosque_id:mid,action:'respond',id:slot.id,d
 assert.equal((await admin('individual-recitation?mosque='+mid)).responses[slot.id+':2030-01-14'],undefined);
 await admin('individual-recitation',{mosque_id:mid,action:'delete',id:slot.id});
 assert.equal((await admin('individual-recitation?mosque='+mid)).slots.length,1);
+
+await admin('individual-recitation',{mosque_id:mid,action:'save',student_id:sid.id,teacher_id:lead.id,weekday:1,minute:1080,duration:15});
+await admin('individual-recitation',{mosque_id:mid,action:'save',student_id:sid.id,teacher_id:lead.id,weekday:1,minute:1095,duration:15});
+const durationSlots=(await admin('individual-recitation?mosque='+mid)).slots;
+assert.equal(durationSlots.find(s=>s.minute===1080).duration,15);
+await admin('individual-recitation',{mosque_id:mid,action:'save',student_id:sid.id,teacher_id:lead.id,weekday:1,minute:1094,duration:15},'POST',409);
+await admin('individual-recitation',{mosque_id:mid,action:'save',student_id:sid.id,teacher_id:lead.id,weekday:2,minute:1080,duration:0},'POST',409);
+await admin('individual-recitation',{mosque_id:mid,action:'save',id:durationSlots.find(s=>s.minute===1080).id,student_id:sid.id,teacher_id:lead.id,weekday:1,minute:1080,duration:30},'POST',409);
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}
