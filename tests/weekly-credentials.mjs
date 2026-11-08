@@ -211,7 +211,7 @@ await supervisor('student-certificates',{mosque_id:mid,student_id:sid.id,index:6
 await supervisor('student-certificates',{mosque_id:mid,student_id:sid.id,index:0});
 const certificate=(await pupil('student-certificates?mosque='+mid+'&student_id='+sid.id)).awards[0];
 assert.equal(certificate.index,0);assert.equal(certificate.snapshot.student.name,'طالب اختبار');
-assert.equal(certificate.snapshot.points,30);
+assert.equal(certificate.snapshot.points,15);
 await boss('student-certificates',{mosque_id:mid,student_id:sid.id,index:0});
 assert.equal((await pupil('student-certificates?mosque='+mid+'&student_id='+sid.id)).awards.length,1);
 assert.equal((await pupil('student-certificates?mosque='+mid+'&student_id='+sid.id)).awards[0].issued_at,certificate.issued_at);
@@ -365,5 +365,16 @@ assert.equal((await pupil('service-status')).services.competition,true);
 await boss('calendar');
 assert.deepEqual((await boss('student-profile?mosque='+mid+'&student_id='+baseline.id)).memory,beforeReadOnly);
 assert.ok((await admin('leaderboards')).institutions.some(m=>m.id===mid));
+// Weekly credit is independent of number of circles, and raw session marks survive.
+await database.prepare('DELETE FROM motivational_scores WHERE student_id IN (?,?)').bind(sid.id,baseline.id).run();
+for(const [student,day,meeting,points] of [[sid.id,'2026-10-26','circle:a',24],[baseline.id,'2026-10-26','circle:a',24],[baseline.id,'2026-10-28','circle:b',24],[baseline.id,'2026-11-01','circle:c',24]]){
+ await database.prepare("INSERT INTO motivational_scores (student_id,day,meeting,attendance,quran,religion,conduct,activity,points,notes,revision,updated_by,updated_at) VALUES (?,?,?,3,7,4,5,5,?,'',1,?,?)").bind(student,day,meeting,points,lead.id,new Date().toISOString()).run();
+}
+assert.equal((await boss('motivation?mosque='+mid+'&student_id='+sid.id)).points,24);
+assert.equal((await boss('motivation?mosque='+mid+'&student_id='+baseline.id)).points,24);
+await database.prepare("UPDATE motivational_scores SET day='2026-11-02' WHERE student_id=? AND meeting='circle:c'").bind(baseline.id).run();
+assert.equal((await boss('motivation?mosque='+mid+'&student_id='+baseline.id)).points,48);
+assert.equal((await boss('leaderboards')).institutions.find(m=>m.id===mid).students.find(s=>s.id===baseline.id).points,48);
+assert.equal((await boss('motivation?mosque='+mid+'&student_id='+baseline.id)).records.length,3);
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}

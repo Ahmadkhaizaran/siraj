@@ -1,3 +1,4 @@
+import {weeklyPoints} from './weekly-points';
 import {rankFor} from './student-ranks';
 export async function studentCertificates(ctx:any){
  const {user,method,body,params,scope,studentAccess,mosqueExists,rows,one,q,fail,json,audit}=ctx;
@@ -15,7 +16,7 @@ export async function studentCertificates(ctx:any){
  }
  const index=body.index;if(!Number.isInteger(index)||index<0||index>6)fail(400,'الرتبة غير صالحة');
  const records=await rows('SELECT ms.*,u.name AS teacher_name FROM motivational_scores ms LEFT JOIN users u ON u.id=ms.updated_by WHERE ms.student_id=? ORDER BY ms.day DESC,ms.meeting',sid);
- const points=records.reduce((total:number,r:any)=>total+Number(r.points),0);
+ const points=weeklyPoints(records);
  if(index>rankFor(points).index)fail(400,'لم يبلغ الطالب هذه الرتبة بعد');
  const mosque=await one('SELECT name,logo FROM mosques WHERE id=?',mid);
  const award={index,issued_at:new Date().toISOString(),issued_by:user.name,snapshot:{issued_at:new Date().toISOString(),points,records,student:{id:sid,name:student.name},mosque}};

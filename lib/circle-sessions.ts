@@ -1,3 +1,4 @@
+import {WEEKLY_SCORES} from './weekly-points';
 import {parseMemoryUpdates,memoryStatement,checkedMemoryBatch,circleKind} from './memory-updates';
 import {circleWindow,validateSchedule,WEEKDAYS,scheduledCircleDay,type CircleSchedule} from './circle-window';
 import {beirutDay,addDays} from './islamic-calendar';
@@ -78,7 +79,7 @@ export async function circleSession(ctx:Row){
   let memoryUpdates:ReturnType<typeof parseMemoryUpdates>=[];try{memoryUpdates=parseMemoryUpdates(input.memory_updates)}catch(e){fail(400,(e as Error).message)}
   if(memoryUpdates?.length&&(circle.kind!=='quran'||!['present','late'].includes(input.status)))fail(400,'تحديث الحفظ متاح للحاضر في حلقة قرآن فقط');
   const meeting='circle:'+cid,prior=await one('SELECT points FROM motivational_scores WHERE student_id=? AND day=? AND meeting=?',sid,day,meeting);
-  records.push({sid,memoryUpdates:memoryUpdates||[],status:input.status,values,points:earnedPoints(values),notes:text(input.notes,'الملاحظات',1000,false),prior:prior?.points||0,meeting});
+  records.push({sid,memoryUpdates:memoryUpdates||[],status:input.status,values,points:earnedPoints(values),notes:text(input.notes,'الملاحظات',1000,false),prior:prior?.points||0,priorFair:Number((await one('SELECT COALESCE(SUM(points),0) AS points FROM '+WEEKLY_SCORES+' fair WHERE student_id=?',sid))?.points||0),meeting});
  }
  const roster=await rows("SELECT s.id FROM students s WHERE s.mosque_id=? AND s.status='active' AND "+member,mid,cid,cid);
  if(roster.some(s=>!seen.has(s.id)))fail(400,'حدّد حالة جميع طلاب الحلقة قبل الاعتماد النهائي؛ اللقاء سيُقفل بعد الحفظ');
@@ -93,7 +94,7 @@ export async function circleSession(ctx:Row){
   const marks=MARKS.map(([key])=>r.values[key]);
   statements.push(q('INSERT INTO circle_records (session_id,student_id,status,attendance,quran,religion,conduct,activity,points,notes,updated_by,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE '+gate+' ON CONFLICT(session_id,student_id) DO UPDATE SET status=excluded.status,attendance=excluded.attendance,quran=excluded.quran,religion=excluded.religion,conduct=excluded.conduct,activity=excluded.activity,points=excluded.points,notes=excluded.notes,updated_by=excluded.updated_by,updated_at=excluded.updated_at',sessionId,r.sid,r.status,...marks,r.points,r.notes,user.id,stamp,sessionId,token));
   statements.push(q('INSERT INTO motivational_scores (student_id,day,meeting,attendance,quran,religion,conduct,activity,points,notes,revision,updated_by,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,1,?,? WHERE '+gate+' ON CONFLICT(student_id,day,meeting) DO UPDATE SET attendance=excluded.attendance,quran=excluded.quran,religion=excluded.religion,conduct=excluded.conduct,activity=excluded.activity,points=excluded.points,notes=excluded.notes,revision=motivational_scores.revision+1,updated_by=excluded.updated_by,updated_at=excluded.updated_at',r.sid,day,r.meeting,...marks,r.points,r.notes,user.id,stamp,sessionId,token));
-  statements.push(q('INSERT OR IGNORE INTO platform_achievements (student_id,rank,points,marks,meeting,day,created_at) SELECT ?,MIN(6,CAST(SUM(points)/35 AS INTEGER)),SUM(points),?,?,?,? FROM motivational_scores WHERE student_id=? HAVING MIN(6,CAST(SUM(points)/35 AS INTEGER))>MIN(6,CAST((SUM(points)-?+?)/35 AS INTEGER)) AND ?>=20 AND ?>=4 AND '+gate,r.sid,JSON.stringify(r.values),r.meeting,day,stamp,r.sid,r.points,r.prior,Object.values(r.values).reduce<number>((n,v)=>n+Number(v),0),r.values.conduct,sessionId,token));
+  statements.push(q('INSERT OR IGNORE INTO platform_achievements (student_id,rank,points,marks,meeting,day,created_at) SELECT ?,MIN(6,CAST(SUM(points)/35 AS INTEGER)),SUM(points),?,?,?,? FROM '+WEEKLY_SCORES+' fair WHERE student_id=? HAVING MIN(6,CAST(SUM(points)/35 AS INTEGER))>MIN(6,CAST(?/35 AS INTEGER)) AND ?>=20 AND ?>=4 AND '+gate,r.sid,JSON.stringify(r.values),r.meeting,day,stamp,r.sid,r.priorFair,Object.values(r.values).reduce<number>((n,v)=>n+Number(v),0),r.values.conduct,sessionId,token));
  }
  statements.push(q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) SELECT ?,?,?,?,? WHERE '+gate,crypto.randomUUID(),mid,user.id,'حُفظ لقاء '+circle.name+' بتاريخ '+day,stamp,sessionId,token));
  const result=records.some(r=>r.memoryUpdates.length)?await checkedMemoryBatch(db,statements,required,fail):await db.batch(statements);

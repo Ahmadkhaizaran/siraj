@@ -41,6 +41,8 @@ export function postgresQuery(input:string){
   // SQLite truncates these nonnegative rank quotients, so floor explicitly.
   sql=sql.replaceAll('CAST(SUM(points)/35 AS INTEGER)','FLOOR(SUM(points)/35)')
     .replaceAll('CAST((SUM(points)-?+?)/35 AS INTEGER)','FLOOR((SUM(points)-?+?)/35)');
+  sql=sql.replaceAll("date(day,'weekday 0','-6 days')","date_trunc('week',day::date)::date::text");
+  sql=sql.replaceAll('CAST(?/35 AS INTEGER)','FLOOR(?::numeric/35)');
   sql=scalarFunctions(sql);
   let output='',quoted=false,n=0;
   for(let i=0;i<sql.length;i++){
