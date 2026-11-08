@@ -2,7 +2,7 @@ import {WEEKLY_SCORES} from './weekly-points';
 import {parseMemoryUpdates,memoryStatement,checkedMemoryBatch,circleKind} from './memory-updates';
 import {circleWindow,validateSchedule,WEEKDAYS,scheduledCircleDay,type CircleSchedule} from './circle-window';
 import {beirutDay,addDays} from './islamic-calendar';
-import {MARKS,earnedPoints} from './student-ranks';
+import {MARKS,earnedPoints,circleScoreMaximum} from './student-ranks';
 type Row=Record<string,any>;
 
 // A circle has one attendance/assessment encounter per Beirut calendar day.
@@ -83,6 +83,7 @@ export async function circleSession(ctx:Row){
   const values:Record<string,number>={attendance:input.status==='present'?3:input.status==='late'?2:0};
   for(const [key,label,max] of MARKS){if(key==='attendance'||key==='tajweed'&&input[key]==null)continue;const value=input[key]??0;if(!Number.isInteger(value)||value<0||value>max)fail(400,'تحقّق من علامة '+label);values[key]=value;}
   if(individual&&circle.kind==='quran'){if(values.religion)fail(400,'درس الدين غير معتمد في حلقة القرآن');values.religion=0;}
+  if(individual&&circle.kind==='religion'){if(values.quran||values.tajweed)fail(400,'القرآن والتجويد غير معتمدين في حلقة الدين');values.quran=0;values.tajweed=0;}
   if(['absent','excused'].includes(input.status)&&Object.values(values).some(v=>v!==0))fail(400,'الطالب الغائب أو المعذور لا يحصل على علامات لقاء لم يحضره');
   let memoryUpdates:ReturnType<typeof parseMemoryUpdates>=[];try{memoryUpdates=parseMemoryUpdates(input.memory_updates)}catch(e){fail(400,(e as Error).message)}
   if(memoryUpdates?.length&&(circle.kind!=='quran'||!['present','late'].includes(input.status)))fail(400,'تحديث الحفظ متاح للحاضر في حلقة قرآن فقط');
@@ -103,7 +104,7 @@ export async function circleSession(ctx:Row){
   const marks=MARKS.map(([key])=>r.values[key]??null);
   statements.push(q('INSERT INTO circle_records (session_id,student_id,status,attendance,quran,religion,conduct,activity,tajweed,points,notes,updated_by,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE '+gate+' ON CONFLICT(session_id,student_id) DO UPDATE SET status=excluded.status,attendance=excluded.attendance,quran=excluded.quran,religion=excluded.religion,conduct=excluded.conduct,activity=excluded.activity,tajweed=excluded.tajweed,points=excluded.points,notes=excluded.notes,updated_by=excluded.updated_by,updated_at=excluded.updated_at',sessionId,r.sid,r.status,...marks,r.points,r.notes,user.id,stamp,sessionId,token));
   statements.push(q('INSERT INTO motivational_scores (student_id,day,meeting,attendance,quran,religion,conduct,activity,tajweed,points,notes,revision,updated_by,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,1,?,? WHERE '+gate+' ON CONFLICT(student_id,day,meeting) DO UPDATE SET attendance=excluded.attendance,quran=excluded.quran,religion=excluded.religion,conduct=excluded.conduct,activity=excluded.activity,tajweed=excluded.tajweed,points=excluded.points,notes=excluded.notes,revision=motivational_scores.revision+1,updated_by=excluded.updated_by,updated_at=excluded.updated_at',r.sid,day,r.meeting,...marks,r.points,r.notes,user.id,stamp,sessionId,token));
-  if(individual){const maximum=circle.kind==='quran'?25:30;statements.push(q('UPDATE circle_records SET score_max=? WHERE session_id=? AND student_id=? AND '+gate,maximum,sessionId,r.sid,sessionId,token));statements.push(q('UPDATE motivational_scores SET score_max=? WHERE student_id=? AND day=? AND meeting=? AND '+gate,maximum,r.sid,day,r.meeting,sessionId,token));}
+  if(individual){const maximum=circleScoreMaximum(circle.kind);statements.push(q('UPDATE circle_records SET score_max=? WHERE session_id=? AND student_id=? AND '+gate,maximum,sessionId,r.sid,sessionId,token));statements.push(q('UPDATE motivational_scores SET score_max=? WHERE student_id=? AND day=? AND meeting=? AND '+gate,maximum,r.sid,day,r.meeting,sessionId,token));}
   statements.push(q('INSERT OR IGNORE INTO platform_achievements (student_id,rank,points,marks,meeting,day,created_at) SELECT ?,MIN(6,CAST(SUM(points)/35 AS INTEGER)),SUM(points),?,?,?,? FROM '+WEEKLY_SCORES+' fair WHERE student_id=? HAVING MIN(6,CAST(SUM(points)/35 AS INTEGER))>MIN(6,CAST(?/35 AS INTEGER)) AND ?>=20 AND ?>=4 AND '+gate,r.sid,JSON.stringify(r.values),r.meeting,day,stamp,r.sid,r.priorFair,Object.values(r.values).reduce<number>((n,v)=>n+Number(v),0),r.values.conduct,sessionId,token));
  }
  statements.push(q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) SELECT ?,?,?,?,? WHERE '+gate,crypto.randomUUID(),mid,user.id,'حُفظ لقاء '+circle.name+' بتاريخ '+day,stamp,sessionId,token));

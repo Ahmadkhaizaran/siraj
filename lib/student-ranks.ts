@@ -2,3 +2,6 @@ export const RANKS=[{name:'مبتدئ',icon:'🌱',color:'#426b53'},{name:'مث�
 export const MARKS=[['attendance','الحضور',3],['quran','القرآن',7],['religion','درس الدين',5],['conduct','الأخلاق',5],['activity','النشاط',5],['tajweed','التجويد',5]] as const;
 export function earnedPoints(values:Record<string,number|string>){const legacy=values.tajweed==null,marks:ReadonlyArray<readonly [string,string,number]>=legacy?MARKS.filter(([key])=>key!=='tajweed'):MARKS;const sum=marks.reduce((n,[key])=>n+Number(values[key]??0),0);return sum+(legacy&&marks.every(([key,,max])=>Number(values[key])===max)?5:0)}
 export function rankFor(points:number){const index=Math.min(6,Math.floor(Math.max(0,points)/35));return {...RANKS[index],index,threshold:index*35,remaining:index===6?0:(index+1)*35-points,progress:index===6?35:points-index*35}}
+
+export function marksForCircle(kind:string){return MARKS.filter(([key])=>kind==='quran'?key!=='religion':kind==='religion'?!['quran','tajweed'].includes(key):true)}
+export function circleScoreMaximum(kind:string){return kind==='quran'?25:kind==='religion'?18:30}

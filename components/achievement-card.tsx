@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {RANKS,MARKS,rankFor} from '../lib/student-ranks';
+import {RANKS,marksForCircle,rankFor} from '../lib/student-ranks';
 import {officialMosqueLogo} from '../lib/mosque-branding';
 type Row=Record<string,any>;
 async function picture(src:string){const img=new Image();img.src=src;await img.decode();return img}
@@ -29,7 +29,7 @@ export async function achievementImage(data:Row,index:number):Promise<Blob>{
  c.fillStyle='#183c32';c.font='700 30px "IBM Plex Sans Arabic"';c.fillText(data.mosque.name,420,420,400);
  text(index>=5?'شهادة تميّز واجتهاد':'شهادة إنجاز واجتهاد',475,60,r.color);text('نحتفي باجتهاد الطالب',575,32,'#52695f',400);text(data.student.name,685,86);
  text('رتبة '+r.name,795,65,r.color);text('الرصيد التراكمي: '+data.points+' نقطة',875,44);
- const last=data.records[0];if(last){text('آخر تقييم معتمد: '+last.day+' — '+last.meeting,980,29,'#52695f',400);text(MARKS.map(([key,label,max])=>label+' '+(last[key]??'لم يُقيّم')+'/'+max).join('  •  '),1050,29,'#183c32',400,1840);text('نقاط اللقاء: '+last.points+' — تشمل مكافأة الإتقان عند استحقاقها',1120,27,'#52695f',400)}
+ const last=data.records[0];if(last){text('آخر تقييم معتمد: '+last.day+' — '+last.meeting,980,29,'#52695f',400);text(marksForCircle(last.score_max===18?'religion':last.score_max===25?'quran':'other').map(([key,label,max])=>label+' '+(last[key]??'لم يُقيّم')+'/'+max).join('  •  '),1050,29,'#183c32',400,1840);text('نقاط اللقاء: '+last.points+' — تشمل مكافأة الإتقان عند استحقاقها',1120,27,'#52695f',400)}
  text(index===6?'رائد في الاجتهاد، وأمامك آفاق جديدة':'خطوة جديدة في رحلة العلم والمثابرة',1235,37,r.color);
  text('صادرة من سجل التقييم التحفيزي في سِراج · '+new Intl.DateTimeFormat('ar-LB',{timeZone:'Asia/Beirut',dateStyle:'long'}).format(data.issued_at?new Date(data.issued_at):new Date()),1365,25,'#52695f',400);
  return await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('تعذّر تصدير الصورة')),'image/png'));
