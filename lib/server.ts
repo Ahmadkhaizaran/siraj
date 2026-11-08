@@ -1,3 +1,4 @@
+import {parseInitialMemory,type InitialMemory} from './initial-memory';
 import {studentCertificates} from './student-certificates';
 import {supervisionReport} from './supervision-report';
 import {individualRecitation} from './individual-recitation';
@@ -399,9 +400,10 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const statement=method==='POST'?q('INSERT INTO students (id,mosque_id,circle_id,name,age,contact,notes,status,english_name,nationality,quran_level,joined_on,contact_mode,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',sid,mid,cid,name,age,contact,notes,status,englishName,nationality,quranLevel,joined,contactMode,now()):q('UPDATE students SET circle_id=?,name=?,age=?,contact=?,notes=?,status=?,english_name=?,nationality=?,quran_level=?,joined_on=?,contact_mode=? WHERE id=? AND mosque_id=?',cid,name,age,contact,notes,status,englishName,nationality,quranLevel,joined,contactMode,sid,mid);
    let credentials:Row|undefined;
    if(method==='POST'){
+    let initial:InitialMemory=[];try{initial=parseInitialMemory(body.initial_memory)}catch(e){fail(400,(e as Error).message)}
     // Hash before mutation. Student code allocation, profile and account commit atomically.
     const secret=studentPassword(englishName),hashed=await hashPassword(secret,pepper()),uid=id(),vault=await sealStudentPassword(sid,hashed,secret,pepper());
-    await db.batch([statement,q('INSERT INTO settings (key,value) VALUES (?,?)','student-credential:'+sid,vault),q('INSERT INTO student_codes (student_id) VALUES (?)',sid),q("INSERT INTO users (id,mosque_id,name,username,password_hash,role,student_id,active,created_at) SELECT ?,?,?,lower('SRG-'||number),?,'student',?,?,? FROM student_codes WHERE student_id=?",uid,mid,name,hashed,sid,status==='active'?1:0,now(),sid),audit(mid,'انضم الطالب '+name)]);
+    await db.batch([statement,...initial.map(m=>q('INSERT INTO memorization (student_id,surah,ranges,revision,updated_by,updated_at) VALUES (?,?,?,1,?,?)',sid,m.surah,JSON.stringify(m.ranges),user.id,now())),q('INSERT INTO settings (key,value) VALUES (?,?)','student-initial-memory:'+sid,JSON.stringify({recorded_at:now(),memory:initial})),q('INSERT INTO settings (key,value) VALUES (?,?)','student-credential:'+sid,vault),q('INSERT INTO student_codes (student_id) VALUES (?)',sid),q("INSERT INTO users (id,mosque_id,name,username,password_hash,role,student_id,active,created_at) SELECT ?,?,?,lower('SRG-'||number),?,'student',?,?,? FROM student_codes WHERE student_id=?",uid,mid,name,hashed,sid,status==='active'?1:0,now(),sid),audit(mid,'انضم الطالب '+name)]);
     const code=await one('SELECT username FROM users WHERE id=?',uid);credentials={username:code!.username.toUpperCase(),password:secret};
    }else{
     await db.batch([statement,q("UPDATE users SET name=?,active=? WHERE student_id=?",name,status==='active'?1:0,sid),...(status==='inactive'?[q('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE student_id=?)',sid)]:[]),audit(mid,'حُدّث ملف الطالب '+name)]);

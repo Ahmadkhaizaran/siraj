@@ -216,5 +216,16 @@ await boss('student-certificates',{mosque_id:mid,student_id:sid.id,index:0});
 assert.equal((await pupil('student-certificates?mosque='+mid+'&student_id='+sid.id)).awards.length,1);
 assert.equal((await pupil('student-certificates?mosque='+mid+'&student_id='+sid.id)).awards[0].issued_at,certificate.issued_at);
 await pupil('student-certificates?mosque='+otherMosque+'&student_id='+otherStudent.id,undefined,'GET',403);
+
+const baseline=await boss('students',{mosque_id:mid,name:'طالب حفظ سابق',english_name:'Baseline Student',initial_memory:[{surah:78,ranges:[[1,40]]},{surah:114,ranges:[[1,6]]}]},'POST',201);
+const baselineProfile=await boss('student-profile?mosque='+mid+'&student_id='+baseline.id);
+assert.deepEqual(baselineProfile.memory.find(m=>m.surah===78).ranges,[[1,40]]);
+assert.equal((await boss('motivation?mosque='+mid+'&student_id='+baseline.id)).points,0);
+assert.equal((await boss('leaderboards')).institutions.find(m=>m.id===mid).students.find(s=>s.id===baseline.id).points,0);
+await boss('students',{id:baseline.id,mosque_id:mid,name:'طالب حفظ سابق معدّل'},'PATCH');
+assert.equal((await boss('student-profile?mosque='+mid+'&student_id='+baseline.id)).memory.length,2);
+const beforeBad=(await database.prepare('SELECT COUNT(*) AS n FROM students').first()).n;
+await boss('students',{mosque_id:mid,name:'حفظ غير صالح',english_name:'Invalid Memory',initial_memory:[{surah:1,ranges:[[1,8]]}]},'POST',400);
+assert.equal((await database.prepare('SELECT COUNT(*) AS n FROM students').first()).n,beforeBad);
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}
