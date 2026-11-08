@@ -77,8 +77,8 @@ assert.equal((await boss('student-account',{mosque_id:mid,student_id:sid.id,acti
 const enc=await database.prepare('SELECT value FROM settings WHERE key=?').bind('student-credential:'+sid.id).first();assert.ok(!enc.value.includes(recovered.credentials.password));
 assert.equal((await admin('staff-credentials',{id:lead.id})).credentials.password,lead.credentials.password);
 assert.equal((await boss('staff-credentials',{id:lead.id})).credentials.password,lead.credentials.password);
-assert.equal((await teacher('staff-credentials',{id:staff.id})).credentials.password,staff.credentials.password);
-assert.equal((await teacher('staff-credentials',{id:lead.id})).credentials.password,lead.credentials.password);
+await teacher('staff-credentials',{id:staff.id},'POST',403);
+await teacher('staff-credentials',{id:lead.id},'POST',403);
 const supervisor=client(),supervisorAccount=await boss('users',{mosque_id:mid,name:'مشرف تجريبي',english_name:'Test Supervisor',phone:'70000003',role:'supervisor',auto_credentials:true},'POST',201);
 await supervisor('auth/login',supervisorAccount.credentials);
 assert.equal((await supervisor('staff-credentials',{id:staff.id})).credentials.password,staff.credentials.password);
@@ -91,7 +91,7 @@ for(const actor of [boss,teacher,supervisor]){
 }
 const unassigned=await boss('students',{mosque_id:mid,name:'طالب غير مسند',english_name:'Unassigned Student'},'POST',201);
 await teacher('student-account',{mosque_id:mid,student_id:unassigned.id,action:'reveal'},'POST',403);
-assert.ok((await teacher('data')).staff.some(a=>a.id===lead.id&&a.username===lead.credentials.username));
+assert.deepEqual((await teacher('data')).staff,[]);
 await platform('staff-credentials',{id:lead.id},'POST',403);
 await pupil('staff-credentials',{id:lead.id},'POST',403);
 await client()('staff-credentials',{id:lead.id},'POST',401);
@@ -280,5 +280,20 @@ const upcomingSession=await reportClient('circle-session?mosque='+mid+'&circle_i
 const expectedNext=new Date(today+'T12:00:00Z');expectedNext.setUTCDate(expectedNext.getUTCDate()+2);
 assert.equal(upcomingSession.date,expectedNext.toISOString().slice(0,10));assert.equal(upcomingSession.can_record,false);
 await reportClient('circle-session',{mosque_id:mid,circle_id:upcomingCircle,date:today,revision:0,records:[{student_id:sid.id,status:'present'}]},'POST',403);
+
+assert.deepEqual((await reportClient('data')).staff,[]);
+const teacherRead=await reportClient('student-profile?mosque='+mid+'&student_id='+baseline.id);
+assert.ok(teacherRead.memory.length>0);
+const beforeReadOnly=(await boss('student-profile?mosque='+mid+'&student_id='+baseline.id)).memory;
+await reportClient('students',{mosque_id:mid,id:baseline.id,name:'تعديل ممنوع'},'PATCH',403);
+await reportClient('memorization',{mosque_id:mid,student_id:baseline.id,surah:78,ranges:[],revision:3},'POST',403);
+await reportClient('memorization-batch',{mosque_id:mid,student_id:baseline.id,updates:[{surah:78,ranges:[],revision:3}]},'POST',403);
+await reportClient('assessments',{mosque_id:mid,student_id:baseline.id,surah:78,maximum:4,memorization:4,retention:4,tajweed:4,performance:4,date:today},'POST',403);
+await reportClient('attendance',{mosque_id:mid,date:today,records:[{student_id:baseline.id,status:'present'}]},'POST',403);
+await reportClient('progress',{mosque_id:mid,student_id:baseline.id,date:today,kind:'حفظ',topic:'تعديل ممنوع',score:5},'POST',403);
+await reportClient('staff-credentials',{id:lead.id},'POST',403);
+assert.deepEqual((await boss('student-profile?mosque='+mid+'&student_id='+baseline.id)).memory,beforeReadOnly);
+
+for(const actor of [admin,boss,supervisor,reportClient,pupil,platform])await actor('calendar');
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}

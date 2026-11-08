@@ -131,6 +131,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   if(path==='calendar'&&method==='GET')return json(await communityFeed(db,user));
   const isOwner=user.role==='admin',isAdmin=['admin','platform_supervisor'].includes(user.role),manager=isAdmin||user.role==='primary',isTeacher=user.role==='teacher',isStudent=user.role==='student';
   if(isStudent&&path==='export')fail(403,'تصدير بيانات الجهة متاح لإدارتها فقط');
+  if(isTeacher&&write&&['students','memorization','memorization-batch','assessments','attendance','progress','staff-credentials'].includes(path))fail(403,'حساب المدرّس للعرض؛ تسجيل الحفظ والعلامات متاح من لقاء الحلقة في موعده فقط');
   if(isStudent&&path==='auth/password')fail(403,'تغيير كلمة سر الطالب من صلاحيات المعلّم أو المشرف الأساسي فقط');
   if(isStudent&&write&&!['calendar/seen'].includes(path))fail(403,'حساب الطالب للعرض فقط');
   if(isAdmin&&['students','circles','attendance','progress','export','student-profile','memorization','assessments','student-account','motivation','circle-session','circle-enrollments','circle-schedule'].includes(path))fail(403,'المتابعة التعليمية من صلاحيات إدارة المسجد أو المركز ومدرّسيه');
@@ -156,7 +157,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    return json({credentials:{name:account.name,username:account.username.toUpperCase(),password:secret,contact_mode:account.contact_mode}});
   }
   if(path==='staff-credentials'&&method==='POST'){
-   if(!isOwner&&!['primary','supervisor','teacher'].includes(user.role))fail(403,'استرجاع حسابات الفريق متاح لصاحب المنصّة وفريق تعليم الجهة');
+   if(!isOwner&&!['primary','supervisor'].includes(user.role))fail(403,'استرجاع حسابات الفريق متاح لصاحب المنصّة وفريق تعليم الجهة');
    await throttle('staff-recovery:'+user.id,30);
    const target=await one("SELECT id,name,username,password_hash,role,mosque_id,active FROM users WHERE id=? AND cancelled_at IS NULL",text(body.id,'الحساب',80));
    if(!target||!['primary','supervisor','teacher','platform_supervisor'].includes(target.role)||!target.active)fail(404,'الحساب غير متاح للاسترجاع');
@@ -299,7 +300,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const circleAttendance=await rows("SELECT cr.session_id||':'||cr.student_id AS id,c.mosque_id,cr.student_id,cs.day,cr.status,cr.updated_by AS created_by,c.id AS circle_id,c.name AS circle_name FROM circle_records cr JOIN circle_sessions cs ON cs.id=cr.session_id JOIN circles c ON c.id=cs.circle_id JOIN students s ON s.id=cr.student_id WHERE c.mosque_id=? AND s.status!='deleted'"+(isTeacher?" AND c.teacher_id=? AND c.status='active'":'')+(all?'':" AND cs.day>=date(?,'-45 days')"),mid,...(isTeacher?[user.id]:[]),...(all?[]:[day]));
    att.push(...circleAttendance);
    const ps=await rows("SELECT p.*,s.name AS student_name,u.name AS teacher_name FROM progress p JOIN students s ON s.id=p.student_id LEFT JOIN users u ON u.id=p.created_by WHERE p.mosque_id=? AND s.status!='deleted'"+(isTeacher?" AND p.student_id IN (SELECT s.id FROM students s JOIN circles c ON c.id=s.circle_id WHERE s.mosque_id=? AND c.teacher_id=? AND c.status='active')":'')+' ORDER BY p.day DESC,p.created_at DESC'+(all?'':' LIMIT 150'),...vargs);
-   const staff=await rows("SELECT id,name,english_name,username,role,phone,student_id,active,mosque_id,created_at FROM users WHERE mosque_id=? AND cancelled_at IS NULL AND role!='student' ORDER BY created_at",mid);
+   const staff=isTeacher?[]:await rows("SELECT id,name,english_name,username,role,phone,student_id,active,mosque_id,created_at FROM users WHERE mosque_id=? AND cancelled_at IS NULL AND role!='student' ORDER BY created_at",mid);
    const act:Row[]=[]; // Staff membership and administrative activity are never exposed to institution users.
    const individualEnabled=['primary','supervisor'].includes(user.role)&&(await one('SELECT value FROM settings WHERE key=?','feature:individual-recitation:'+mid))?.value==='enabled';
    return json({features:{individual_recitation:individualEnabled},user,mosques,mosque_id:mid,circles:cs,students:ss,attendance:att,progress:ps,staff,activity:act,date:day,exported_at:all?now():undefined});

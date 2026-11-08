@@ -1,13 +1,14 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {ArrowRight,BookOpen,HandHeart,Sun,Moon,Heart,RotateCcw,Check,Copy,ChevronLeft} from 'lucide-react';
+import {ArrowRight,BookOpen,HandHeart,Sun,Moon,Heart,RotateCcw,Check,Copy,ChevronLeft,CalendarDays} from 'lucide-react';
 import {beirutDay} from '../lib/islamic-calendar';
 import QuranReader from './quran-reader';
+import CommunityCalendar from './community-calendar';
 import {ADHKAR_SOURCE,DHIKR_GROUPS,PRAYERS,RUQYAH,UNLIMITED,adhkarFor,dhikrTitle} from '../lib/adhkar';
 const number=(n:number)=>new Intl.NumberFormat('ar-LB').format(n);
-export default function IslamicTools({initialTool,userId}:{initialTool?:'quran'|'adhkar';userId?:string}){
- const [tool,setTool]=useState<'quran'|'adhkar'|null>(initialTool||null);
- return <section className="islamic-tools">{tool?<><button className="text-button" onClick={()=>setTool(null)}><ArrowRight size={18}/>العودة إلى الأدوات</button>{tool==='quran'?<QuranReader/>:<Adhkar userId={userId}/>}</>:<><div className="page-heading"><div><span className="eyebrow">مساحة القراءة والذكر</span><h1>الأدوات</h1><p>أدوات متاحة لكل أفراد المنصّة.</p></div></div><div className="tools-grid"><button className="panel tool-card" onClick={()=>setTool('quran')}><BookOpen size={36}/><h2>المصحف الشريف</h2><p>القراءة بالسورة والجزء والصفحة.</p><span>فتح المصحف <ChevronLeft size={18}/></span></button><button className="panel tool-card" onClick={()=>setTool('adhkar')}><HandHeart size={36}/><h2>الأذكار</h2><p>أذكار اليوم والصلاة والنوم، والرقية والدعاء.</p><span>فتح الأذكار <ChevronLeft size={18}/></span></button></div></>}</section>;
+export default function IslamicTools({initialTool,userId}:{initialTool?:'quran'|'adhkar'|'calendar';userId?:string}){
+ const [tool,setTool]=useState<'quran'|'adhkar'|'calendar'|null>(initialTool||null);
+ return <section className="islamic-tools">{tool?<><button className="text-button" onClick={()=>setTool(null)}><ArrowRight size={18}/>العودة إلى الأدوات</button>{tool==='quran'?<QuranReader/>:tool==='calendar'?<CommunityCalendar/>:<Adhkar userId={userId}/>}</>:<><div className="page-heading"><div><span className="eyebrow">مساحة القراءة والذكر</span><h1>الأدوات</h1><p>أدوات متاحة لكل أفراد المنصّة.</p></div></div><div className="tools-grid"><button className="panel tool-card" onClick={()=>setTool('quran')}><BookOpen size={36}/><h2>المصحف الشريف</h2><p>القراءة بالسورة والجزء والصفحة.</p><span>فتح المصحف <ChevronLeft size={18}/></span></button><button className="panel tool-card" onClick={()=>setTool('adhkar')}><HandHeart size={36}/><h2>الأذكار</h2><p>أذكار اليوم والصلاة والنوم، والرقية والدعاء.</p><span>فتح الأذكار <ChevronLeft size={18}/></span></button><button type="button" className="panel tool-card" onClick={()=>setTool('calendar')}><CalendarDays size={36}/><h2>التقويم والنشاطات</h2><p>مواعيد اللقاءات والنشاطات والمناسبات.</p><span>فتح التقويم والنشاطات<ChevronLeft size={18}/></span></button></div></>}</section>;
 }
 function Adhkar({userId}:{userId?:string}){
  const [group,setGroup]=useState(''),[category,setCategory]=useState(''),[index,setIndex]=useState(0),[counts,setCounts]=useState<Record<string,number>>({}),[notice,setNotice]=useState(''),[size,setSize]=useState(27);
