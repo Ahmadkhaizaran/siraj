@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import path from 'node:path';
+const testRoot=process.env.SIRAJ_REACT_TEST_ROOT;
+if(!testRoot)throw Error('Set SIRAJ_REACT_TEST_ROOT to an isolated react-test-renderer installation');
+const req=createRequire(path.resolve(testRoot,'package.json'));
+const {default:React}=await import(req.resolve('react'));
+const {default:Renderer,act}=await import(req.resolve('react-test-renderer'));
+const esbuild=createRequire(import.meta.resolve('wrangler/package.json'))('esbuild');
+await esbuild.build({entryPoints:['components/circle-workspace.tsx'],bundle:true,platform:'node',format:'cjs',jsx:'automatic',outfile:'outputs/encounter-confirm-test.cjs',plugins:[{name:'one-react',setup(build){build.onResolve({filter:/^react(?:\/.*)?$/},args=>({path:req.resolve(args.path),external:true}))}}]});
+const Workspace=createRequire(import.meta.url)('../outputs/encounter-confirm-test.cjs').default;
+globalThis.IS_REACT_ACT_ENVIRONMENT=true;
+globalThis.window={confirm(){throw Error('Native confirm must not be used')}};
+const date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Beirut'}).format(new Date());
+const student={id:'s',name:'طالب اختبار',student_status:'active',memory:[],record:null};
+const circle={id:'c',name:'حلقة اختبار',teacher_id:'t',kind:'religion'};
+let finalized=false,posts=0,reject=false;
+globalThis.fetch=async(url,options={})=>{
+ if(options.method==='POST'){posts++;if(reject)return Response.json({error:'خطأ تجريبي بالحفظ'},{status:500});const body=JSON.parse(options.body);assert.equal(body.records[0].status,'present');assert.equal(body.revision,0);finalized=true;return Response.json({ok:true})}
+ return Response.json({circle,date,revision:finalized?1:0,students:[student],member_ids:['s'],encounters:[],window:{open:!finalized,reason:'الموعد مفتوح'},can_record:!finalized,can_enroll:false});
+};
+let tree;await act(async()=>{tree=Renderer.create(React.createElement(Workspace,{data:{user:{id:'t',role:'teacher'},mosque_id:'m',circles:[circle],students:[]},mineOnly:true}))});
+await act(async()=>{tree.root.findByProps({className:'panel circle-session-card'}).findAllByType('button')[0].props.onClick()});
+const text=n=>n.children.map(x=>typeof x==='string'?x:text(x)).join('');
+const button=label=>tree.root.findAllByType('button').find(b=>text(b)===label);
+await act(async()=>button('اعتماد حضور اللقاء وعلاماته').props.onClick());assert.equal(posts,0);assert.equal(tree.root.findAllByProps({role:'dialog'}).length,0);assert.ok(JSON.stringify(tree.toJSON()).includes('حدّد حالة الحضور'));
+await act(async()=>tree.root.findByProps({'aria-label':'حالة حضور طالب اختبار'}).props.onChange({target:{value:'present'}}));
+await act(async()=>button('اعتماد حضور اللقاء وعلاماته').props.onClick());assert.equal(tree.root.findAllByProps({role:'dialog'}).length,1);assert.equal(posts,0);
+await act(async()=>button('العودة للمراجعة').props.onClick());assert.equal(tree.root.findAllByProps({role:'dialog'}).length,0);assert.equal(tree.root.findByProps({'aria-label':'حالة حضور طالب اختبار'}).props.value,'present');
+await act(async()=>button('اعتماد حضور اللقاء وعلاماته').props.onClick());reject=true;
+await act(async()=>button('تأكيد الاعتماد والحفظ').props.onClick());assert.equal(posts,1);assert.equal(tree.root.findByProps({'aria-label':'حالة حضور طالب اختبار'}).props.value,'present');assert.ok(JSON.stringify(tree.toJSON()).includes('خطأ تجريبي بالحفظ'));
+reject=false;await act(async()=>button('اعتماد حضور اللقاء وعلاماته').props.onClick());await act(async()=>button('تأكيد الاعتماد والحفظ').props.onClick());assert.equal(posts,2);assert.equal(finalized,true);assert.equal(tree.root.findAllByProps({role:'dialog'}).length,0);assert.ok(JSON.stringify(tree.toJSON()).includes('اعتُمد اللقاء وأُقفل'));
+await act(async()=>tree.unmount());console.log('PASS: in-app confirmation, missing attendance, cancellation, server failure retains draft, retry and successful save.');
