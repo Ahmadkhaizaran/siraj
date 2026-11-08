@@ -16,17 +16,19 @@ const student={id:'s',name:'طالب اختبار',student_status:'active',memor
 const circle={id:'c',name:'حلقة اختبار',teacher_id:'t',kind:'religion'};
 let finalized=false,posts=0,reject=false;
 globalThis.fetch=async(url,options={})=>{
- if(options.method==='POST'){posts++;if(reject)return Response.json({error:'خطأ تجريبي بالحفظ'},{status:500});const body=JSON.parse(options.body);assert.equal(body.records[0].status,'present');assert.equal(body.revision,0);finalized=true;return Response.json({ok:true})}
+ if(options.method==='POST'){posts++;if(reject)return Response.json({error:'خطأ تجريبي بالحفظ'},{status:500});const body=JSON.parse(options.body);assert.equal(body.records[0].tajweed,5);assert.equal(body.records[0].status,'present');assert.equal(body.revision,0);finalized=true;return Response.json({ok:true})}
  return Response.json({circle,date,revision:finalized?1:0,students:[student],member_ids:['s'],encounters:[],window:{open:!finalized,reason:'الموعد مفتوح'},can_record:!finalized,can_enroll:false});
 };
-let tree;await act(async()=>{tree=Renderer.create(React.createElement(Workspace,{data:{user:{id:'t',role:'teacher'},mosque_id:'m',circles:[circle],students:[]},mineOnly:true}))});
-await act(async()=>{tree.root.findByProps({className:'panel circle-session-card'}).findAllByType('button')[0].props.onClick()});
+let tree;await act(async()=>{tree=Renderer.create(React.createElement(Workspace,{data:{user:{id:'t',role:'teacher'},mosque_id:'m',circles:[circle,{...circle,id:'q',name:'قرآن الاختبار',kind:'quran'},{...circle,id:'other',teacher_id:'someone-else'}],students:[]},mineOnly:true}))});
+assert.equal(tree.root.findAllByProps({className:'panel circle-session-card'}).length,2);
+await act(async()=>{tree.root.findAllByProps({className:'panel circle-session-card'})[0].findAllByType('button')[0].props.onClick()});
 const text=n=>n.children.map(x=>typeof x==='string'?x:text(x)).join('');
 const button=label=>tree.root.findAllByType('button').find(b=>text(b)===label);
 await act(async()=>button('اعتماد حضور اللقاء وعلاماته').props.onClick());assert.equal(posts,0);assert.equal(tree.root.findAllByProps({role:'dialog'}).length,0);assert.ok(JSON.stringify(tree.toJSON()).includes('حدّد حالة الحضور'));
 await act(async()=>tree.root.findByProps({'aria-label':'حالة حضور طالب اختبار'}).props.onChange({target:{value:'present'}}));
 await act(async()=>button('اعتماد حضور اللقاء وعلاماته').props.onClick());assert.equal(tree.root.findAllByProps({role:'dialog'}).length,1);assert.equal(posts,0);
 await act(async()=>button('العودة للمراجعة').props.onClick());assert.equal(tree.root.findAllByProps({role:'dialog'}).length,0);assert.equal(tree.root.findByProps({'aria-label':'حالة حضور طالب اختبار'}).props.value,'present');
+await act(async()=>tree.root.findByProps({'aria-label':'التجويد للطالب طالب اختبار'}).props.onChange({target:{value:'5'}}));
 await act(async()=>button('اعتماد حضور اللقاء وعلاماته').props.onClick());reject=true;
 await act(async()=>button('تأكيد الاعتماد والحفظ').props.onClick());assert.equal(posts,1);assert.equal(tree.root.findByProps({'aria-label':'حالة حضور طالب اختبار'}).props.value,'present');assert.ok(JSON.stringify(tree.toJSON()).includes('خطأ تجريبي بالحفظ'));
 reject=false;await act(async()=>button('اعتماد حضور اللقاء وعلاماته').props.onClick());await act(async()=>button('تأكيد الاعتماد والحفظ').props.onClick());assert.equal(posts,2);assert.equal(finalized,true);assert.equal(tree.root.findAllByProps({role:'dialog'}).length,0);assert.ok(JSON.stringify(tree.toJSON()).includes('اعتُمد اللقاء وأُقفل'));

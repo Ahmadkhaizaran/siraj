@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 export async function postgresHarness(build){
  const {PGlite}=await import(process.env.PGLITE_MODULE_PATH||'@electric-sql/pglite');
  const pg=new PGlite();
- const schema=(await Promise.all(['001_siraj_schema.sql','002_circle_sessions.sql','003_staff_english_name.sql'].map(name=>readFile('deployment/supabase/'+name,'utf8')))).join('\n').split(';').filter(s=>!/^\s*(?:REVOKE|GRANT|ALTER DEFAULT PRIVILEGES)\b/i.test(s)).join(';');
+ const schema=(await Promise.all(['001_siraj_schema.sql','002_circle_sessions.sql','003_staff_english_name.sql','004_encounter_tajweed.sql'].map(name=>readFile('deployment/supabase/'+name,'utf8')))).join('\n').split(';').filter(s=>!/^\s*(?:REVOKE|GRANT|ALTER DEFAULT PRIVILEGES)\b/i.test(s)).join(';');
  await pg.exec(schema);
  await pg.exec('SET search_path TO siraj,pg_catalog');
  await build({stdin:{contents:"export {handle} from './lib/server.ts';export {syncMasjidi} from './lib/community-server.ts';export {postgresDatabase} from './lib/postgres-adapter.ts';",resolveDir:process.cwd(),loader:'ts'},bundle:true,external:['cloudflare:workers'],format:'esm',platform:'neutral',outfile:'outputs/qa-postgres.mjs'});

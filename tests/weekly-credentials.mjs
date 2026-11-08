@@ -376,5 +376,19 @@ await database.prepare("UPDATE motivational_scores SET day='2026-11-02' WHERE st
 assert.equal((await boss('motivation?mosque='+mid+'&student_id='+baseline.id)).points,48);
 assert.equal((await boss('leaderboards')).institutions.find(m=>m.id===mid).students.find(s=>s.id===baseline.id).points,48);
 assert.equal((await boss('motivation?mosque='+mid+'&student_id='+baseline.id)).records.length,3);
+// New tajweed axis, historical scores unchanged, both circle kinds assigned to teacher.
+for(const kind of ['quran','religion']){
+ const tc=await boss('circles',{mosque_id:mid,name:'تجويد واختبار '+kind,teacher_id:reportTeacher.id,kind,level:kind==='quran'?'قرآن':'سيرة'},'POST',201);
+ await boss('circle-enrollments',{mosque_id:mid,circle_id:tc.id,student_ids:[baseline.id]});
+ await boss('circle-schedule',{mosque_id:mid,circle_id:tc.id,schedule:{weekday,mode:'day'}});
+ const evaluation={mosque_id:mid,circle_id:tc.id,date:today,revision:0,records:[{student_id:baseline.id,status:'present',quran:7,religion:5,conduct:5,activity:5,tajweed:6}]};
+ await reportClient('circle-session',evaluation,'POST',400);
+ evaluation.records[0].tajweed=5;
+ await reportClient('circle-session',evaluation);
+ const saved=await reportClient('circle-session?mosque='+mid+'&circle_id='+tc.id+'&date='+today);
+ assert.equal(saved.students[0].record.tajweed,5);assert.equal(saved.students[0].record.points,30);
+}
+const assigned=(await reportClient('data')).circles;
+assert.ok(assigned.some(c=>c.kind==='quran'));assert.ok(assigned.some(c=>c.kind==='religion'));assert.ok(assigned.every(c=>c.teacher_id===reportTeacher.id));
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}
