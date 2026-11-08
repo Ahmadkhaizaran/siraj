@@ -41,7 +41,7 @@ export async function circleSession(ctx:Row){
   const stamp=new Date().toISOString();
   const fallback="(SELECT ce.circle_id FROM circle_enrollments ce JOIN circles c ON c.id=ce.circle_id WHERE ce.student_id=students.id AND ce.circle_id!=? AND c.mosque_id=students.mosque_id AND c.status='active' ORDER BY ce.created_at,ce.circle_id LIMIT 1)";
   const clear=ids.length?q('UPDATE students SET circle_id='+fallback+' WHERE mosque_id=? AND circle_id=? AND id NOT IN ('+ids.map(()=>'?').join(',')+')',cid,mid,cid,...ids):q('UPDATE students SET circle_id='+fallback+' WHERE mosque_id=? AND circle_id=?',cid,mid,cid);
-  await db.batch([clear,q('DELETE FROM circle_enrollments WHERE circle_id=?',cid),...ids.flatMap(sid=>[q('INSERT INTO circle_enrollments (circle_id,student_id,created_at) VALUES (?,?,?)',cid,sid,stamp),q('UPDATE students SET circle_id=? WHERE id=? AND mosque_id=? AND circle_id IS NULL',cid,sid,mid)]),q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',crypto.randomUUID(),mid,user.id,'حُدّث طلاب حلقة '+circle.name,stamp)]);
+  await db.batch([...(body.append===true?[]:[clear,q('DELETE FROM circle_enrollments WHERE circle_id=?',cid)]),...ids.flatMap(sid=>[q('INSERT OR IGNORE INTO circle_enrollments (circle_id,student_id,created_at) VALUES (?,?,?)',cid,sid,stamp),q('UPDATE students SET circle_id=? WHERE id=? AND mosque_id=? AND circle_id IS NULL',cid,sid,mid)]),q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',crypto.randomUUID(),mid,user.id,'حُدّث طلاب حلقة '+circle.name,stamp)]);
   return json({ok:true});
  }
  const day=date(method==='GET'?params.get('date')||(schedule?scheduledCircleDay(schedule.weekday):beirutDay()):body.date);
@@ -53,7 +53,7 @@ export async function circleSession(ctx:Row){
  const individual=body.individual===true;
  const window=await circleWindow(schedule,day,!!weeklySession&&!individualMode);
  if(method==='GET'){
-  const students=await rows("SELECT s.id,s.name,s.status AS student_status,'SRG-'||n.number AS student_code FROM students s LEFT JOIN student_codes n ON n.student_id=s.id WHERE s.mosque_id=? AND s.status!='deleted' AND ((s.status='active' AND "+member+") OR EXISTS (SELECT 1 FROM circle_records cr WHERE cr.student_id=s.id AND cr.session_id=?)) ORDER BY s.name,s.id",mid,cid,cid,sessionId);
+  const students=await rows("SELECT s.id,s.name,s.quran_level,(SELECT value FROM settings WHERE key='student-tajweed-level:'||s.id) AS tajweed_level,s.status AS student_status,'SRG-'||n.number AS student_code FROM students s LEFT JOIN student_codes n ON n.student_id=s.id WHERE s.mosque_id=? AND s.status!='deleted' AND ((s.status='active' AND "+member+") OR EXISTS (SELECT 1 FROM circle_records cr WHERE cr.student_id=s.id AND cr.session_id=?)) ORDER BY s.name,s.id",mid,cid,cid,sessionId);
   const memoryChanges=await rows('SELECT key,value FROM settings WHERE key LIKE ?','circle-memory:'+sessionId+':%');
   const records=await rows('SELECT student_id,status,attendance,quran,religion,conduct,activity,tajweed,score_max,points,notes,updated_at FROM circle_records WHERE session_id=?',sessionId);
   const members=await rows("SELECT s.id FROM students s WHERE s.mosque_id=? AND s.status='active' AND "+member,mid,cid,cid);
