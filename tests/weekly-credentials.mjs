@@ -257,5 +257,21 @@ if(usePostgres){
  await reportClient('circle-session',{...baseMeeting,circle_id:nonq,records:[{...qrecord,memory_updates:[{surah:1,ranges:[],revision:1}]}]},'POST',400);
  await reportClient('circle-session',{...baseMeeting,circle_id:nonq,records:[{...qrecord,status:'absent',quran:0,religion:0,conduct:0,activity:0,memory_updates:[{surah:1,ranges:[],revision:1}]}]},'POST',400);
 }
+
+const typePayload={mosque_id:mid,name:'اختبار ثبات نوع الحلقة',teacher_id:reportTeacher.id,level:'قرآن',schedule:''};
+const typedCircle=(await boss('circles',{...typePayload,kind:'quran'},'POST',201)).id;
+for(const kind of ['religion','other','quran','religion']){
+ await boss('circles',{...typePayload,id:typedCircle,kind},'PATCH');
+ assert.equal((await boss('data')).circles.find(c=>c.id===typedCircle).kind,kind);
+ assert.equal((await reportClient('data')).circles.find(c=>c.id===typedCircle).kind,kind);
+ assert.equal((await reportClient('circle-session?mosque='+mid+'&circle_id='+typedCircle+'&date='+today)).circle.kind,kind);
+}
+await boss('circles',{...typePayload,id:typedCircle,name:'تعديل الاسم دون تغيير النوع'},'PATCH');
+assert.equal((await boss('data')).circles.find(c=>c.id===typedCircle).kind,'religion');
+
+assert.ok((await reportClient('data')).circles.every(c=>c.teacher_id===reportTeacher.id));
+await reportClient('circle-session?mosque='+mid+'&circle_id='+cid+'&date='+today,undefined,'GET',403);
+await reportClient('circles',{mosque_id:mid,name:'حلقة غير مصرح بها'},'POST',403);
+await reportClient('supervision-report?mosque='+mid,undefined,'GET',403);
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}

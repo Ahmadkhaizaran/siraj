@@ -13,4 +13,4 @@ export async function checkedMemoryBatch(db:any,statements:any[],required:number
  if(!db.batchChecked)fail(503,'حفظ تحديثات القرآن غير متاح في هذا الخادم');
  try{return await db.batchChecked(statements,required)}catch(e){if((e as Error).message==='SIRAJ_WRITE_CONFLICT')fail(409,'تغيّر سجل الحفظ أو اللقاء؛ حدّث الصفحة وأعد مراجعة التغييرات');throw e}
 }
-export function circleKind(circle:any){return circle.kind||(/قرآن|قران|تجويد|تحفيظ/.test(circle.level||'')?'quran':'other')}
+export function circleKind(circle:any){if(['quran','religion','other'].includes(circle.kind))return circle.kind;const level=circle.level||'';return /قرآن|قران|تجويد|تحفيظ/.test(level)?'quran':/فقه|عقيدة|سيرة|دينية/.test(level)?'religion':'other'}

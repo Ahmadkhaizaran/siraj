@@ -284,7 +284,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    }
    const teacherWhere=isTeacher?' AND c.teacher_id=?':'';
    const cargs=isTeacher?[mid,user.id]:[mid];
-   const cs=(await rows("SELECT c.*,u.name AS teacher_name FROM circles c LEFT JOIN users u ON c.teacher_id=u.id WHERE c.mosque_id=? AND c.status='active'"+teacherWhere+' ORDER BY c.created_at',...cargs)).map(c=>({...c,kind:circleKind(c),start_date:c.start_date||beirutDay(new Date(c.created_at))}));
+   const cs=(await rows("SELECT c.*,u.name AS teacher_name,ck.value AS kind FROM circles c LEFT JOIN users u ON c.teacher_id=u.id LEFT JOIN settings ck ON ck.key='circle-kind:'||c.id WHERE c.mosque_id=? AND c.status='active'"+teacherWhere+' ORDER BY c.created_at',...cargs)).map(c=>({...c,kind:circleKind(c),start_date:c.start_date||beirutDay(new Date(c.created_at))}));
    await q("UPDATE students SET status='active' WHERE mosque_id=? AND status='graduated'",mid).run();
    // Populate permanent numbers for existing students without changing applied migrations.
    await q('INSERT OR IGNORE INTO student_codes (student_id) SELECT s.id FROM students s WHERE s.mosque_id=? AND NOT EXISTS (SELECT 1 FROM student_codes n WHERE n.student_id=s.id)',mid).run();
