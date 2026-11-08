@@ -273,5 +273,12 @@ assert.ok((await reportClient('data')).circles.every(c=>c.teacher_id===reportTea
 await reportClient('circle-session?mosque='+mid+'&circle_id='+cid+'&date='+today,undefined,'GET',403);
 await reportClient('circles',{mosque_id:mid,name:'حلقة غير مصرح بها'},'POST',403);
 await reportClient('supervision-report?mosque='+mid,undefined,'GET',403);
+
+const upcomingCircle=(await boss('circles',{mosque_id:mid,name:'موعد أسبوعي ثابت',teacher_id:reportTeacher.id,kind:'quran'},'POST',201)).id;
+await boss('circle-schedule',{mosque_id:mid,circle_id:upcomingCircle,schedule:{weekday:(weekday+2)%7,mode:'clock',time:'18:00'}});
+const upcomingSession=await reportClient('circle-session?mosque='+mid+'&circle_id='+upcomingCircle);
+const expectedNext=new Date(today+'T12:00:00Z');expectedNext.setUTCDate(expectedNext.getUTCDate()+2);
+assert.equal(upcomingSession.date,expectedNext.toISOString().slice(0,10));assert.equal(upcomingSession.can_record,false);
+await reportClient('circle-session',{mosque_id:mid,circle_id:upcomingCircle,date:today,revision:0,records:[{student_id:sid.id,status:'present'}]},'POST',403);
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}

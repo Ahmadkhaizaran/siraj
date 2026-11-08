@@ -1,5 +1,5 @@
 import {parseMemoryUpdates,memoryStatement,checkedMemoryBatch,circleKind} from './memory-updates';
-import {circleWindow,validateSchedule,WEEKDAYS,type CircleSchedule} from './circle-window';
+import {circleWindow,validateSchedule,WEEKDAYS,scheduledCircleDay,type CircleSchedule} from './circle-window';
 import {beirutDay,addDays} from './islamic-calendar';
 import {MARKS,earnedPoints} from './student-ranks';
 type Row=Record<string,any>;
@@ -43,7 +43,7 @@ export async function circleSession(ctx:Row){
   await db.batch([clear,q('DELETE FROM circle_enrollments WHERE circle_id=?',cid),...ids.flatMap(sid=>[q('INSERT INTO circle_enrollments (circle_id,student_id,created_at) VALUES (?,?,?)',cid,sid,stamp),q('UPDATE students SET circle_id=? WHERE id=? AND mosque_id=? AND circle_id IS NULL',cid,sid,mid)]),q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',crypto.randomUUID(),mid,user.id,'حُدّث طلاب حلقة '+circle.name,stamp)]);
   return json({ok:true});
  }
- const day=date(method==='GET'?params.get('date')||beirutDay():body.date);
+ const day=date(method==='GET'?params.get('date')||(schedule?scheduledCircleDay(schedule.weekday):beirutDay()):body.date);
  const sessionId=cid+':'+day;
  const session=await one('SELECT id,day,revision,updated_at FROM circle_sessions WHERE circle_id=? AND day=?',cid,day);
  const weekday=new Date(day+'T12:00:00Z').getUTCDay(),weekStart=addDays(day,-((weekday+6)%7)),weekEnd=addDays(weekStart,6);
@@ -56,7 +56,8 @@ export async function circleSession(ctx:Row){
   const members=await rows("SELECT s.id FROM students s WHERE s.mosque_id=? AND s.status='active' AND "+member,mid,cid,cid);
   const encounters=await rows('SELECT cs.day,cs.revision,(SELECT COUNT(*) FROM circle_records cr WHERE cr.session_id=cs.id) AS students_count FROM circle_sessions cs WHERE cs.circle_id=? ORDER BY cs.day DESC LIMIT 90',cid);
   const memory=await rows('SELECT m.student_id,m.surah,m.ranges,m.revision FROM memorization m JOIN students s ON s.id=m.student_id WHERE s.mosque_id=?',mid);
-  return json({circle,date:day,revision:session?.revision||0,students:students.map(s=>({...s,memory:memory.filter(m=>m.student_id===s.id).map(m=>({...m,ranges:JSON.parse(m.ranges)})),record:records.find(r=>r.student_id===s.id)?{...records.find(r=>r.student_id===s.id),memory_updates:JSON.parse(memoryChanges.find(m=>m.key==='circle-memory:'+sessionId+':'+s.id)?.value||'[]')}:null})),member_ids:members.map(s=>s.id),encounters,schedule,window,can_record:circle.teacher_id===user.id&&window.open,can_enroll:user.role==='primary'});
+  const upcoming=schedule?scheduledCircleDay(schedule.weekday):null;
+  return json({circle,date:day,next_date:upcoming===day&&upcoming===beirutDay()&&weeklySession?addDays(upcoming,7):upcoming,revision:session?.revision||0,students:students.map(s=>({...s,memory:memory.filter(m=>m.student_id===s.id).map(m=>({...m,ranges:JSON.parse(m.ranges)})),record:records.find(r=>r.student_id===s.id)?{...records.find(r=>r.student_id===s.id),memory_updates:JSON.parse(memoryChanges.find(m=>m.key==='circle-memory:'+sessionId+':'+s.id)?.value||'[]')}:null})),member_ids:members.map(s=>s.id),encounters,schedule,window,can_record:circle.teacher_id===user.id&&window.open,can_enroll:user.role==='primary'});
  }
  if(method!=='POST')fail(405,'العملية غير متاحة');
  if(circle.teacher_id!==user.id)fail(403,'تسجيل حضور وتقييمات الحلقة خاص بالمدرّس أو المشرف المسندة إليه');
