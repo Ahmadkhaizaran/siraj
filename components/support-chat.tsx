@@ -1,8 +1,9 @@
 'use client';
+import {fetchWithDeadline} from '../lib/client-request';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {MessageCircle,Send,RefreshCw} from 'lucide-react';
 type Row=Record<string,any>;
-async function api(path:string,body?:Row){const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,cache:'no-store'});const d:any=await r.json();if(!r.ok)throw Error(d.error||'تعذّر تحميل المحادثة');return d;}
+async function api(path:string,body?:Row){const r=await fetchWithDeadline('/api/'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,cache:'no-store'});const d:any=await r.json();if(!r.ok)throw Error(d.error||'تعذّر تحميل المحادثة');return d;}
 export default function SupportChat({user,initialMosqueId=''}:{user:Row;initialMosqueId?:string}){
  const admin=['admin','platform_supervisor'].includes(user.role);const [threads,setThreads]=useState<Row[]>([]),[selected,setSelected]=useState(initialMosqueId||(!admin?user.mosque_id:'')),[messages,setMessages]=useState<Row[]>([]),[draft,setDraft]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(false),[more,setMore]=useState(false);const sequence=useRef(0),threadRef=useRef(selected),expandedHistory=useRef(false),logRef=useRef<HTMLDivElement>(null);
  threadRef.current=selected;

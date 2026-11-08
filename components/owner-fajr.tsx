@@ -1,4 +1,5 @@
 'use client';
+import {fetchWithDeadline} from '../lib/client-request';
 import {useEffect,useState} from 'react';
 import {Sunrise,Bell,BellOff,X} from 'lucide-react';
 type Prayer={key:string;name:string;date:string;time:string;at:number};
@@ -6,8 +7,8 @@ type Info={schedule:null|{date:string;prayers:Prayer[];next:Prayer;server_time:n
 const day=(now:number)=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Beirut'}).format(new Date(now));
 export default function OwnerFajr(){
  const [info,setInfo]=useState<Info|null>(null),[clock,setClock]=useState(Date.now()),[enabled,setEnabled]=useState(false),[notice,setNotice]=useState(''),[alert,setAlert]=useState(false),[busy,setBusy]=useState(false);
- const verify=async()=>{const r=await fetch('/api/owner-fajr',{cache:'no-store'});if(!r.ok){setInfo(null);setEnabled(false);throw Error('التجربة متاحة لصاحب المنصّة بعد تسجيل الدخول فقط')}const d:Info=await r.json();setInfo(d);return d};
- useEffect(()=>{let live=true;fetch('/api/owner-fajr',{cache:'no-store'}).then(async r=>{if(!r.ok)return;const d:Info=await r.json();if(live){setInfo(d);setClock(d.server_time);try{setEnabled(localStorage.getItem('siraj:fajr:enabled:'+d.owner)==='1')}catch{}}}).catch(()=>{});return()=>{live=false}},[]);
+ const verify=async()=>{const r=await fetchWithDeadline('/api/owner-fajr',{cache:'no-store'});if(!r.ok){setInfo(null);setEnabled(false);throw Error('التجربة متاحة لصاحب المنصّة بعد تسجيل الدخول فقط')}const d:Info=await r.json();setInfo(d);return d};
+ useEffect(()=>{let live=true;fetchWithDeadline('/api/owner-fajr',{cache:'no-store'}).then(async r=>{if(!r.ok)return;const d:Info=await r.json();if(live){setInfo(d);setClock(d.server_time);try{setEnabled(localStorage.getItem('siraj:fajr:enabled:'+d.owner)==='1')}catch{}}}).catch(()=>{});return()=>{live=false}},[]);
  async function show(test=false){setBusy(true);try{const d=await verify();setAlert(true);setNotice(test?'هذا تنبيه تجريبي، وليس إعلان دخول وقت الصلاة.':'حان وقت الفجر في صيدا، حسب مواقيت مسجدي.');if('Notification' in window&&Notification.permission==='granted'){try{new Notification(test?'سراج — مواقيت صيدا وتنبيه الفجر':'سراج — تذكير بصلاة الفجر',{body:d.hadith.text+' — صحيح مسلم 657a (من حديث)',icon:'/favicon.svg',tag:'siraj-owner-fajr'})}catch{setNotice('ظهر التنبيه داخل المنصّة؛ إشعار الجهاز غير مدعوم هنا.')}}}catch(e){setNotice((e as Error).message)}finally{setBusy(false)}}
  useEffect(()=>{let live=true;const timer=setInterval(()=>{setClock(Date.now());void verify().catch(()=>{})},60000);return()=>{live=false;clearInterval(timer)}},[]);
  useEffect(()=>{if(!enabled||!info)return;let live=true;const tick=async()=>{try{const d=await verify();if(!live||!d.schedule)return;const fajr=d.schedule.prayers.find(p=>p.key==='Fajr');if(!fajr)return;const delta=d.server_time-fajr.at;if(delta>=0&&delta<120000){const key='siraj:fajr:'+d.owner+':'+d.schedule.date;if(localStorage.getItem(key))return;localStorage.setItem(key,'sent');await show()}}catch{if(live)setEnabled(false)}};const timer=setInterval(tick,30000);void tick();return()=>{live=false;clearInterval(timer)}},[enabled,info?.owner]);

@@ -1,4 +1,5 @@
 'use client';
+import {fetchWithDeadline} from '../lib/client-request';
 import {ServiceBoundary} from './service-access';
 import { useEffect,useMemo,useState,useRef,type FormEvent } from 'react';
 import { CalendarDays,ChevronRight,ChevronLeft,Plus,RefreshCw,Landmark,Clock,ExternalLink,Bell,CheckCheck,LoaderCircle,X,Moon,ShieldCheck,Info,BookOpen,ArrowLeft } from 'lucide-react';
@@ -8,7 +9,7 @@ import { sameMosqueName } from '../lib/mosque-branding';
 type Feed={notifications_since?:number;events:CalendarEvent[];sources:any[];today:string;is_authenticated?:boolean;seen_at:number;unread_count:number;can_publish:boolean;managed_mosques:any[];server_time:number};
 const number=(n:number)=>new Intl.NumberFormat('ar-LB').format(n);
 const formatDay=(day:string)=>new Date(day+'T12:00:00Z').toLocaleDateString('ar-LB',{timeZone:'Asia/Beirut',weekday:'long',day:'numeric',month:'long'});
-export async function calendarRequest(path:string,body?:any,method='POST'){const r=await fetch('/api/'+path,{method:body?method:'GET',credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const d:any=await r.json();if(!r.ok)throw new Error(d.error||'تعذّر تحميل التقويم');return d;}
+export async function calendarRequest(path:string,body?:any,method='POST'){const r=await fetchWithDeadline('/api/'+path,{method:body?method:'GET',credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const d:any=await r.json();if(!r.ok)throw new Error(d.error||'تعذّر تحميل التقويم');return d;}
 export function useCommunityFeed(enabled=true){
  const [feed,setFeed]=useState<Feed|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),sequence=useRef(0);
  async function reload(){const request=++sequence.current;setLoading(true);try{const data=await calendarRequest('calendar');if(request!==sequence.current)return;setFeed(data);setError('')}catch(e){if(request===sequence.current)setError((e as Error).message)}finally{if(request===sequence.current)setLoading(false)}}

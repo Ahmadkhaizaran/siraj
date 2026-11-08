@@ -13,13 +13,13 @@ globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 globalThis.window={confirm(){throw Error('Native confirm must not be used')}};
 const date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Beirut'}).format(new Date());
 const student={id:'s',name:'طالب اختبار',student_status:'active',memory:[],record:null};
-const circle={id:'c',name:'حلقة اختبار',teacher_id:'t',kind:'religion'};
+const circle={id:'c',name:'حلقة اختبار',teacher_id:'t',kind:'quran'};
 let finalized=false,posts=0,reject=false;
 globalThis.fetch=async(url,options={})=>{
- if(options.method==='POST'){posts++;if(reject)return Response.json({error:'خطأ تجريبي بالحفظ'},{status:500});const body=JSON.parse(options.body);assert.equal(body.records[0].tajweed,5);assert.equal(body.records[0].status,'present');assert.equal(body.revision,0);finalized=true;return Response.json({ok:true})}
+ if(options.method==='POST'){posts++;if(reject)return Response.json({error:'خطأ تجريبي بالحفظ'},{status:500});const body=JSON.parse(options.body);assert.equal(body.records[0].tajweed,5);assert.equal(body.records[0].notes,'ملاحظة محفوظة');assert.deepEqual(body.records[0].memory_updates,[{surah:96,ranges:[[1,19]],revision:0}]);assert.equal(body.records[0].status,'present');assert.equal(body.revision,0);student.record={...body.records[0],points:8};student.memory=body.records[0].memory_updates.map(m=>({...m,revision:1}));finalized=true;return Response.json({ok:true})}
  return Response.json({circle,date,revision:finalized?1:0,students:[student],member_ids:['s'],encounters:[],window:{open:!finalized,reason:'الموعد مفتوح'},can_record:!finalized,can_enroll:false});
 };
-let tree;await act(async()=>{tree=Renderer.create(React.createElement(Workspace,{data:{user:{id:'t',role:'teacher'},mosque_id:'m',circles:[circle,{...circle,id:'q',name:'قرآن الاختبار',kind:'quran'},{...circle,id:'other',teacher_id:'someone-else'}],students:[]},mineOnly:true}))});
+let tree;await act(async()=>{tree=Renderer.create(React.createElement(Workspace,{data:{user:{id:'t',role:'teacher'},mosque_id:'m',circles:[circle,{...circle,id:'q',name:'السيرة الاختبار',kind:'religion'},{...circle,id:'other',teacher_id:'someone-else'}],students:[]},mineOnly:true}))});
 assert.equal(tree.root.findAllByProps({className:'panel circle-session-card'}).length,2);
 await act(async()=>{tree.root.findAllByProps({className:'panel circle-session-card'})[0].findAllByType('button')[0].props.onClick()});
 const text=n=>n.children.map(x=>typeof x==='string'?x:text(x)).join('');
@@ -28,7 +28,15 @@ await act(async()=>button('اعتماد حضور اللقاء وعلاماته')
 await act(async()=>tree.root.findByProps({'aria-label':'حالة حضور طالب اختبار'}).props.onChange({target:{value:'present'}}));
 await act(async()=>button('اعتماد حضور اللقاء وعلاماته').props.onClick());assert.equal(tree.root.findAllByProps({role:'dialog'}).length,1);assert.equal(posts,0);
 await act(async()=>button('العودة للمراجعة').props.onClick());assert.equal(tree.root.findAllByProps({role:'dialog'}).length,0);assert.equal(tree.root.findByProps({'aria-label':'حالة حضور طالب اختبار'}).props.value,'present');
-await act(async()=>tree.root.findByProps({'aria-label':'التجويد للطالب طالب اختبار'}).props.onChange({target:{value:'5'}}));
+const mark=()=>tree.root.findByProps({'aria-label':'التجويد للطالب طالب اختبار'});
+assert.equal(mark().props.value,'');
+await act(async()=>mark().props.onChange({target:{value:'4'}}));assert.equal(mark().props.value,'4');
+await act(async()=>mark().props.onChange({target:{value:''}}));assert.equal(mark().props.value,'');
+await act(async()=>mark().props.onChange({target:{value:'٠٤'}}));assert.equal(mark().props.value,'4');
+await act(async()=>mark().props.onChange({target:{value:'40'}}));await act(async()=>button('اعتماد حضور اللقاء وعلاماته').props.onClick());assert.equal(tree.root.findAllByProps({role:'dialog'}).length,0);assert.ok(JSON.stringify(tree.toJSON()).includes('الحد الأعلى 5'));
+await act(async()=>mark().props.onChange({target:{value:'5'}}));
+await act(async()=>tree.root.findAllByType('textarea')[0].props.onChange({target:{value:'ملاحظة محفوظة'}}));
+const alaq=tree.root.findAllByType('article').find(a=>a.props.className==='memory-surah empty'&&text(a).includes('سورة العلق'));assert.ok(alaq);await act(async()=>alaq.findByType('input').props.onChange({target:{checked:true}}));
 await act(async()=>button('اعتماد حضور اللقاء وعلاماته').props.onClick());reject=true;
 await act(async()=>button('تأكيد الاعتماد والحفظ').props.onClick());assert.equal(posts,1);assert.equal(tree.root.findByProps({'aria-label':'حالة حضور طالب اختبار'}).props.value,'present');assert.ok(JSON.stringify(tree.toJSON()).includes('خطأ تجريبي بالحفظ'));
 reject=false;await act(async()=>button('اعتماد حضور اللقاء وعلاماته').props.onClick());await act(async()=>button('تأكيد الاعتماد والحفظ').props.onClick());assert.equal(posts,2);assert.equal(finalized,true);assert.equal(tree.root.findAllByProps({role:'dialog'}).length,0);assert.ok(JSON.stringify(tree.toJSON()).includes('اعتُمد اللقاء وأُقفل'));

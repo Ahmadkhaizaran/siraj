@@ -1,11 +1,12 @@
 'use client';
+import {fetchWithDeadline} from '../lib/client-request';
 import RankIcon from './rank-icon';
 import {rankAppearance} from '../lib/rank-appearance';
 import {useEffect,useState} from 'react';
 import {Bell} from 'lucide-react';
 import {MARKS} from '../lib/student-ranks';
 type Row=Record<string,any>;
-async function request(path:string,body?:Row){const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,cache:'no-store'}),d:any=await r.json();if(!r.ok)throw Error(d.error);return d}
+async function request(path:string,body?:Row){const r=await fetchWithDeadline('/api/'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,cache:'no-store'}),d:any=await r.json();if(!r.ok)throw Error(d.error);return d}
 export function PlatformAchievementsButton({onOpen}:{onOpen:()=>void}){
  const [count,setCount]=useState(0);useEffect(()=>{let live=true;async function refresh(){if(document.hidden)return;try{const d=await request('platform-achievements?summary=1');if(live)setCount(d.unread_count)}catch{}}refresh();const timer=setInterval(refresh,5000);window.addEventListener('siraj-achievement-reviewed',refresh);document.addEventListener('visibilitychange',refresh);return()=>{live=false;clearInterval(timer);window.removeEventListener('siraj-achievement-reviewed',refresh);document.removeEventListener('visibilitychange',refresh)}},[]);
  return <button className="btn secondary" onClick={onOpen} aria-label={'إنجازات للتهنئة، '+count+' تنبيه جديد'}><Bell size={18}/>إنجازات للتهنئة {count>0&&<strong className="badge green">{count}</strong>}</button>

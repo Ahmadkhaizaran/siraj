@@ -1,4 +1,5 @@
 'use client';
+import {fetchWithDeadline} from '../lib/client-request';
 import {ServiceProvider,usePageAccess,useServiceSnapshot} from '../components/service-access';
 import { useState,useEffect,useMemo,useRef,type FormEvent,type ReactNode } from 'react';
 import { LayoutDashboard,Users,BookOpen,UserRoundCog,ClipboardCheck,TrendingUp,Settings,Landmark,Plus,Search,Bell,ChevronDown,ArrowUpLeft,ArrowLeft,LogOut,Menu,X,Check,CheckCheck,Clock,CalendarDays,Download,ShieldCheck,Sparkles,Eye,EyeOff,LoaderCircle,MoreHorizontal,GraduationCap,Upload,KeyRound,Leaf,ArrowRight,CircleHelp,CheckCircle2,Copy,Trash2,Info,Trophy } from 'lucide-react';
@@ -37,7 +38,7 @@ const dateNow=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Beirut',year:'
 const number=(n:number)=>new Intl.NumberFormat('ar-LB').format(n);
 const dayLabel=(s:string,short=false)=>new Date(s+'T12:00:00').toLocaleDateString('ar-LB',short?{day:'numeric',month:'short'}:{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 const initial=(s:string)=>s?.trim().split(' ').slice(0,2).map(x=>x[0]).join('')||'س';
-async function api(path:string,body?:Row,method='POST'):Promise<any>{const res=await fetch('/api/'+path,{method:body?method:'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin',cache:'no-store'});const value:any=await res.json();if(!res.ok)throw new Error(value.error||'تعذّر الاتصال بالخادم');return value;}
+async function api(path:string,body?:Row,method='POST'):Promise<any>{const res=await fetchWithDeadline('/api/'+path,{method:body?method:'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,credentials:'same-origin',cache:'no-store'});const value:any=await res.json();if(!res.ok)throw new Error(value.error||'تعذّر الاتصال بالخادم');return value;}
 function Brand({small=false}:{small?:boolean}){return <div className={'brand '+(small?'small':'')}><div className="brand-mark"><img src="/favicon.svg" alt=""/></div><div><strong>سِراج<span>،</span></strong>{!small&&<small>لإدارة التعليم في المساجد والمراكز</small>}</div></div>}
 function Avatar({name,color=0}:{name:string;color?:number}){return <span className={'avatar color-'+color%4}>{initial(name)}</span>}
 function Empty({icon:Icon=BookOpen,title,body,action}:{icon?:any;title:string;body:string;action?:ReactNode}){return <div className="empty"><span className="empty-icon"><Icon size={26}/></span><h3>{title}</h3><p>{body}</p>{action}</div>}

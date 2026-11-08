@@ -1,4 +1,5 @@
 'use client';
+import {fetchWithDeadline} from '../lib/client-request';
 import ServiceControlPanel from './service-control-panel';
 import {usePageAccess} from './service-access';
 import IndividualRecitation from './individual-recitation';
@@ -25,7 +26,7 @@ import SupportChat from './support-chat';
 import SirajAssistant from './siraj-assistant';
 type Row=Record<string,any>;
 const roles:Row={platform_supervisor:'مشرف منصّة',admin:'مدير المنصّة',primary:'مشرف أساسي',supervisor:'مشرف',teacher:'مدرّس'};
-async function api(path:string,body?:Row,method='POST'){const r=await fetch('/api/'+path,{method:body?method:'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,cache:'no-store'});const d:any=await r.json();if(!r.ok)throw Error(d.error||'تعذّر تنفيذ الطلب');return d;}
+async function api(path:string,body?:Row,method='POST'){const r=await fetchWithDeadline('/api/'+path,{method:body?method:'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,cache:'no-store'});const d:any=await r.json();if(!r.ok)throw Error(d.error||'تعذّر تنفيذ الطلب');return d;}
 export default function PlatformHome({data,reload,onLogout}:{data:Row;reload:()=>Promise<void>;onLogout:()=>void}){
  const [page,setPage]=useState('overview'),[selected,setSelected]=useState(''),[health,setHealth]=useState<Row|null>(null),[healthError,setHealthError]=useState(''),[retry,setRetry]=useState(0),[menu,setMenu]=useState(false),[filter,setFilter]=useState(''),[modal,setModal]=useState<{type:string;item?:Row}|null>(null),[form,setForm]=useState<Row>({}),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[supportId,setSupportId]=useState(''),[credentials,setCredentials]=useState<Row|null>(null);
  const [removal,setRemoval]=useState<{kind:'account'|'mosque';item:Row;action:'cancel'|'restore'}|null>(null);

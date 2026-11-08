@@ -1,10 +1,11 @@
 'use client';
+import {fetchWithDeadline} from '../lib/client-request';
 import {useEffect,useState} from 'react';
 import {Copy,RefreshCw} from 'lucide-react';
 import {Credentials} from './student-learning';
 type Row=Record<string,any>;
 async function request(id?:string){
- const response=await fetch('/api/student-credentials',{method:id?'POST':'GET',credentials:'same-origin',cache:'no-store',...(id?{headers:{'Content-Type':'application/json'},body:JSON.stringify({id})}:{})});
+ const response=await fetchWithDeadline('/api/student-credentials',{method:id?'POST':'GET',credentials:'same-origin',cache:'no-store',...(id?{headers:{'Content-Type':'application/json'},body:JSON.stringify({id})}:{})});
  const data:Row=await response.json();if(!response.ok)throw Error(data.error||'تعذّر استرجاع الحسابات');return data;
 }
 export default function StudentCredentialsDirectory({mosques}:{mosques:Row[]}){
