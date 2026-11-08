@@ -227,5 +227,35 @@ assert.equal((await boss('student-profile?mosque='+mid+'&student_id='+baseline.i
 const beforeBad=(await database.prepare('SELECT COUNT(*) AS n FROM students').first()).n;
 await boss('students',{mosque_id:mid,name:'حفظ غير صالح',english_name:'Invalid Memory',initial_memory:[{surah:1,ranges:[[1,8]]}]},'POST',400);
 assert.equal((await database.prepare('SELECT COUNT(*) AS n FROM students').first()).n,beforeBad);
+
+if(usePostgres){
+ await boss('memorization-batch',{mosque_id:mid,student_id:baseline.id,updates:[{surah:78,ranges:[[1,10]],revision:1},{surah:1,ranges:[[1,7]],revision:0}]});
+ assert.equal((await boss('motivation?mosque='+mid+'&student_id='+baseline.id)).points,0);
+ await boss('memorization-batch',{mosque_id:mid,student_id:baseline.id,updates:[{surah:1,ranges:[],revision:1},{surah:78,ranges:[[1,40]],revision:1}]},'POST',409);
+ let mem=(await boss('student-profile?mosque='+mid+'&student_id='+baseline.id)).memory;
+ assert.deepEqual(mem.find(m=>m.surah===1).ranges,[[1,7]]);
+ await pupil('memorization-batch',{mosque_id:mid,student_id:baseline.id,updates:[]},'POST',403);
+ await reportClient('memorization-batch',{mosque_id:mid,student_id:baseline.id,updates:[]},'POST',403);
+ const qcid=(await boss('circles',{mosque_id:mid,name:'حلقة قرآن وحفظ',teacher_id:reportTeacher.id,kind:'quran',level:'قرآن'},'POST',201)).id;
+ await boss('circle-enrollments',{mosque_id:mid,circle_id:qcid,student_ids:[baseline.id]});
+ await boss('circle-schedule',{mosque_id:mid,circle_id:qcid,schedule:{weekday,mode:'day'}});
+ const view=await reportClient('circle-session?mosque='+mid+'&circle_id='+qcid+'&date='+today);
+ assert.equal(view.circle.kind,'quran');assert.equal(view.students[0].memory.find(m=>m.surah===78).revision,2);
+ const qrecord={student_id:baseline.id,status:'present',quran:7,religion:5,conduct:5,activity:5};
+ const baseMeeting={mosque_id:mid,circle_id:qcid,date:today,revision:0};
+ await reportClient('circle-session',{...baseMeeting,records:[{...qrecord,memory_updates:[{surah:1,ranges:[],revision:1},{surah:78,ranges:[[1,40]],revision:1}]}]},'POST',409);
+ assert.equal((await reportClient('circle-session?mosque='+mid+'&circle_id='+qcid+'&date='+today)).revision,0);
+ assert.equal((await boss('motivation?mosque='+mid+'&student_id='+baseline.id)).points,0);
+ mem=(await boss('student-profile?mosque='+mid+'&student_id='+baseline.id)).memory;assert.deepEqual(mem.find(m=>m.surah===1).ranges,[[1,7]]);
+ await reportClient('circle-session',{...baseMeeting,records:[{...qrecord,memory_updates:[{surah:78,ranges:[[1,40]],revision:2}]}]});
+ assert.deepEqual((await boss('student-profile?mosque='+mid+'&student_id='+baseline.id)).memory.find(m=>m.surah===78).ranges,[[1,40]]);
+ assert.equal((await boss('motivation?mosque='+mid+'&student_id='+baseline.id)).points,30);
+ assert.equal((await reportClient('circle-session?mosque='+mid+'&circle_id='+qcid+'&date='+today)).students[0].record.memory_updates.length,1);
+ await reportClient('circle-session',{...baseMeeting,records:[qrecord]},'POST',403);
+ const nonq=(await boss('circles',{mosque_id:mid,name:'حلقة فقه فقط',teacher_id:reportTeacher.id,kind:'religion'},'POST',201)).id;
+ await boss('circle-enrollments',{mosque_id:mid,circle_id:nonq,student_ids:[baseline.id]});await boss('circle-schedule',{mosque_id:mid,circle_id:nonq,schedule:{weekday,mode:'day'}});
+ await reportClient('circle-session',{...baseMeeting,circle_id:nonq,records:[{...qrecord,memory_updates:[{surah:1,ranges:[],revision:1}]}]},'POST',400);
+ await reportClient('circle-session',{...baseMeeting,circle_id:nonq,records:[{...qrecord,status:'absent',quran:0,religion:0,conduct:0,activity:0,memory_updates:[{surah:1,ranges:[],revision:1}]}]},'POST',400);
+}
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}

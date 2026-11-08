@@ -1,3 +1,4 @@
+import {parseMemoryUpdates,memoryStatement,checkedMemoryBatch,circleKind} from './memory-updates';
 import {parseInitialMemory,type InitialMemory} from './initial-memory';
 import {studentCertificates} from './student-certificates';
 import {supervisionReport} from './supervision-report';
@@ -283,7 +284,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    }
    const teacherWhere=isTeacher?' AND c.teacher_id=?':'';
    const cargs=isTeacher?[mid,user.id]:[mid];
-   const cs=(await rows("SELECT c.*,u.name AS teacher_name FROM circles c LEFT JOIN users u ON c.teacher_id=u.id WHERE c.mosque_id=? AND c.status='active'"+teacherWhere+' ORDER BY c.created_at',...cargs)).map(c=>({...c,start_date:c.start_date||beirutDay(new Date(c.created_at))}));
+   const cs=(await rows("SELECT c.*,u.name AS teacher_name FROM circles c LEFT JOIN users u ON c.teacher_id=u.id WHERE c.mosque_id=? AND c.status='active'"+teacherWhere+' ORDER BY c.created_at',...cargs)).map(c=>({...c,kind:circleKind(c),start_date:c.start_date||beirutDay(new Date(c.created_at))}));
    await q("UPDATE students SET status='active' WHERE mosque_id=? AND status='graduated'",mid).run();
    // Populate permanent numbers for existing students without changing applied migrations.
    await q('INSERT OR IGNORE INTO student_codes (student_id) SELECT s.id FROM students s WHERE s.mosque_id=? AND NOT EXISTS (SELECT 1 FROM student_codes n WHERE n.student_id=s.id)',mid).run();
@@ -369,10 +370,11 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    }
    const teacher=body.teacher_id?text(body.teacher_id,'المدرّس',80):null;
    if(teacher&&!await one("SELECT id FROM users WHERE id=? AND mosque_id=? AND active=1 AND cancelled_at IS NULL AND role IN ('teacher','supervisor','primary')",teacher,mid))fail(400,'اختر مدرّسًا فعّالًا من الجهة نفسها');
+   const requestedKind=body.kind;if(requestedKind!==undefined&&!['quran','religion','other'].includes(requestedKind))fail(400,'نوع الحلقة غير صالح');
    const name=text(body.name,'اسم الحلقة'),level=text(body.level,'المستوى',100,false),schedule=text(body.schedule,'الموعد',150,false),cid=method==='POST'?id():text(body.id,'الحلقة',80);
    if(method==='PATCH')await circleAccess(cid,mid);
    const statement=method==='POST'?q("INSERT INTO circles (id,mosque_id,name,teacher_id,level,schedule,status,start_date,created_at) VALUES (?,?,?,?,?,?,'active',?,?)",cid,mid,name,teacher,level,schedule,beirutDay(),now()):q('UPDATE circles SET name=?,teacher_id=?,level=?,schedule=? WHERE id=? AND mosque_id=?',name,teacher,level,schedule,cid,mid);
-   await db.batch([statement,audit(mid,(method==='POST'?'أُنشئت حلقة ':'حُدّثت حلقة ')+name)]);return json({ok:true,id:cid},method==='POST'?201:200);
+   await db.batch([statement,...(requestedKind!==undefined?[q('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value','circle-kind:'+cid,requestedKind)]:[]),audit(mid,(method==='POST'?'أُنشئت حلقة ':'حُدّثت حلقة ')+name)]);return json({ok:true,id:cid},method==='POST'?201:200);
   }
   if(path==='students'&&['POST','PATCH'].includes(method)){
    const mid=scope(body.mosque_id);await mosqueExists(mid);
@@ -478,6 +480,15 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const circles=await rows("SELECT c.id,c.name,c.schedule,u.name AS teacher_name,u.phone AS teacher_phone FROM circles c LEFT JOIN users u ON u.id=c.teacher_id AND u.active=1 AND u.cancelled_at IS NULL WHERE c.mosque_id=? AND c.status='active' AND (c.id=(SELECT circle_id FROM students WHERE id=?) OR EXISTS (SELECT 1 FROM circle_enrollments ce WHERE ce.circle_id=c.id AND ce.student_id=?)) ORDER BY c.name",mid,sid,sid);
    const encounters=await rows("SELECT cs.day,c.name AS circle_name,cr.status FROM circle_records cr JOIN circle_sessions cs ON cs.id=cr.session_id JOIN circles c ON c.id=cs.circle_id WHERE cr.student_id=? AND c.mosque_id=? ORDER BY cs.day DESC,c.name LIMIT 30",sid,mid);
    return json({circles,encounters,memory:memory.map(m=>({...m,ranges:JSON.parse(m.ranges)})),assessments:evaluations});
+  }
+  if(path==='memorization-batch'&&method==='POST'){
+   if(!['primary','supervisor','teacher'].includes(user.role))fail(403,'تحديث الحفظ من صلاحيات فريق الجهة');
+   const mid=scope(body.mosque_id),sid=text(body.student_id,'الطالب',80);await studentAccess(sid,mid);await mosqueExists(mid);
+   let updates:ReturnType<typeof parseMemoryUpdates>=[];try{updates=parseMemoryUpdates(body.updates)}catch(e){fail(400,(e as Error).message)}
+   if(!updates?.length)return json({ok:true});
+   const statements=updates.map(m=>memoryStatement(q,sid,m,user.id,now()));
+   await checkedMemoryBatch(db,[...statements,audit(mid,'حُدّث مستوى الحفظ للطالب دون نقاط')],statements.map((_,i)=>i),fail);
+   return json({ok:true});
   }
   if(path==='memorization'&&method==='POST'){
    const mid=scope(body.mosque_id),sid=text(body.student_id,'الطالب',80);await studentAccess(sid,mid);

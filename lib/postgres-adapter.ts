@@ -61,6 +61,9 @@ class Statement {
 export function postgresDatabase(executor:PgExecutor){
   const session={
     prepare:(sql:string)=>new Statement(executor,sql),
+    async batchChecked(statements:Statement[],required:number[]){return executor.transaction(async tx=>{
+      const results=[];for(let i=0;i<statements.length;i++){const r=await statements[i].result(tx);if(required.includes(i)&&r.changes!==1)throw Error('SIRAJ_WRITE_CONFLICT');results.push({results:r.rows,meta:{changes:r.changes},success:true});}return results;
+    });},
     async batch(statements:Statement[]){return executor.transaction(async tx=>{
       const results=[];
       for(const statement of statements){const r=await statement.result(tx);results.push({results:r.rows,meta:{changes:r.changes},success:true});}
