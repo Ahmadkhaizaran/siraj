@@ -293,6 +293,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const sargs=isTeacher?[mid,mid,user.id]:[mid];
    const memberships=await rows("SELECT ce.circle_id,ce.student_id FROM circle_enrollments ce JOIN circles c ON c.id=ce.circle_id WHERE c.mosque_id=? AND c.status='active'",mid);
    const ss=(await rows("SELECT s.*,c.name AS circle_name,t.name AS teacher_name,t.phone AS teacher_phone,'SRG-'||n.number AS student_code FROM students s LEFT JOIN circles c ON c.id=s.circle_id LEFT JOIN users t ON t.id=c.teacher_id JOIN student_codes n ON n.student_id=s.id WHERE s.mosque_id=? AND s.status!='deleted'"+studentSql+' ORDER BY s.created_at DESC',...sargs)).map(s=>({...s,circle_ids:[...new Set([s.circle_id,...memberships.filter(e=>e.student_id===s.id).map(e=>e.circle_id)].filter(Boolean))],joined_on:s.joined_on||beirutDay(new Date(s.created_at))}));
+   if(isTeacher)for(const student of ss)delete (student as Row).student_code;
    const visible=isTeacher?" AND student_id IN (SELECT s.id FROM students s JOIN circles c ON c.id=s.circle_id WHERE s.mosque_id=? AND c.teacher_id=? AND s.status!='deleted' AND c.status='active')":" AND student_id IN (SELECT id FROM students WHERE status!='deleted')";
    const vargs=isTeacher?[mid,mid,user.id]:[mid];
    const all=path==='export';

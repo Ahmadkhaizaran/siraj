@@ -295,5 +295,10 @@ await reportClient('staff-credentials',{id:lead.id},'POST',403);
 assert.deepEqual((await boss('student-profile?mosque='+mid+'&student_id='+baseline.id)).memory,beforeReadOnly);
 
 for(const actor of [admin,boss,supervisor,reportClient,pupil,platform])await actor('calendar');
+
+assert.ok((await reportClient('data')).students.every(s=>!('student_code' in s)&&!('username' in s)));
+const privateSession=await reportClient('circle-session?mosque='+mid+'&circle_id='+excuseCircle+'&date='+today);
+assert.ok(privateSession.students.every(s=>!('student_code' in s)));
+assert.ok((await boss('data')).students.some(s=>s.student_code));
 console.log('PASS:',checks,'API checks for weekly gating, permanent finalization, compact staff accounts, encrypted recovery, password changes and role isolation.');
 }finally{await mf.dispose()}
