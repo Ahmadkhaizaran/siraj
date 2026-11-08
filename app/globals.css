@@ -131,3 +131,5 @@ html[data-theme="dark"] .welcome-banner .art-dot{border-color:#e7c778}
 /* Keep the final action after the fields; never cover Quran ranges or notes. */
 .encounter-save{position:relative;bottom:auto;z-index:auto}.encounter-save>button{min-height:48px;touch-action:manipulation}@media(max-width:600px){.encounter-save{bottom:auto}}
 .encounter-memory-input [role=listbox]{display:grid;gap:4px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--white)}.encounter-memory-input [role=option]{text-align:right;padding:10px;border:0;background:var(--sage);border-radius:6px}.encounter-memory-input p{color:var(--muted)}
+
+.overview-about{margin-top:48px;padding-top:28px;border-top:1px solid var(--line);scroll-margin-top:24px}
