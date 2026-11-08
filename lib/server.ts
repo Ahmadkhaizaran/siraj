@@ -488,7 +488,8 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    let leaders=await rows("SELECT s.id,s.name,s.mosque_id,c.name AS circle_name,m.name AS mosque_name,COALESCE(SUM(ms.points),0) AS total_points,COALESCE(SUM(CASE WHEN ms.day>=? AND ms.day<=? THEN ms.points ELSE 0 END),0) AS points FROM students s JOIN mosques m ON m.id=s.mosque_id LEFT JOIN circles c ON c.id=s.circle_id LEFT JOIN "+WEEKLY_SCORES+" ms ON ms.student_id=s.id WHERE s.status='active' AND m.cancelled_at IS NULL GROUP BY s.id,c.name,m.name ORDER BY points DESC,s.name,s.id",start,end);
    let institutions=await rows('SELECT id,name FROM mosques WHERE cancelled_at IS NULL ORDER BY name,id');
    const accounts=await rows("SELECT id,student_id,mosque_id FROM users WHERE role='student' AND cancelled_at IS NULL");
-   leaders=leaders.filter(s=>enabled(controls,'competition',s.mosque_id,true,'student',accounts.find(a=>a.student_id===s.id)?.id));
+   const accountByStudent=new Map(accounts.map(a=>[a.student_id,a.id]));
+   leaders=leaders.filter(s=>enabled(controls,'competition',s.mosque_id,true,'student',accountByStudent.get(s.id)));
    institutions=institutions.filter(m=>enabled(controls,'competition',m.id,true,'student'));
    const ranked:Row[]=leaders.map(a=>({...a,rank:rankFor(Number(a.total_points))}));
    const institutionsRanked=institutions.map(m=>{const students=ranked.filter(a=>a.mosque_id===m.id);const top=students.filter(a=>a.points>0).slice(0,3);return {...m,points:top.reduce((n,a)=>n+Number(a.points),0),top,students:m.id===user.mosque_id?students:[]}}).sort((a:Row,b:Row)=>b.points-a.points||a.name.localeCompare(b.name)||a.id.localeCompare(b.id));

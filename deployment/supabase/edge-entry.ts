@@ -1,6 +1,7 @@
 // Bundled by build-edge.mjs. Backend credentials never enter client assets.
 // @ts-nocheck -- Deno's runtime types are supplied when deployed to Supabase.
 import postgres from 'npm:postgres@3.4.7';
+import {databaseNumber} from '../../lib/database-number';
 import { handle } from '../../lib/server';
 import { postgresDatabase } from '../../lib/postgres-adapter';
 import { digest,equal } from '../../lib/auth-crypto';
@@ -15,7 +16,7 @@ function executor(connection){return {
     const result=await connection.unsafe(sql,args);
     const numeric=result.columns.filter(c=>[20,21,23,700,701,1700].includes(c.type));
     const rows=result.map(row=>{
-      const value={...row};for(const column of numeric){if(value[column.name]!==null){const number=Number(value[column.name]);if(!Number.isSafeInteger(number))throw new Error('Unsafe numeric result');value[column.name]=number;}}
+      const value={...row};for(const column of numeric){if(value[column.name]!==null){value[column.name]=databaseNumber(value[column.name],column.type);}}
       return value;
     });
     return {rows,changes:result.count};
