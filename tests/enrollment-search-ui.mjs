@@ -5,12 +5,16 @@ const Workspace=createRequire(import.meta.url)('../outputs/enrollment-search-ui.
 const circle={id:'c',name:'حلقة',kind:'quran',teacher_id:'t'},students=[{id:'m',name:'محمد علي',status:'active'},{id:'z',name:'زينب حسن',status:'active'},{id:'a',name:'أحمد محمد',status:'active'},{id:'x',name:'أحمد متوقف',status:'inactive'}];
 globalThis.fetch=async(u,o={})=>{if(o.method==='POST'){const b=JSON.parse(o.body);assert.equal(b.append,true);added=b.student_ids;posts++;return Response.json({ok:true})}return Response.json({circle,date:'2026-11-08',revision:0,students:[],member_ids:added,encounters:[],can_record:false,can_enroll:true,window:{open:false}})};
 const text=n=>n.children.map(x=>typeof x==='string'?x:text(x)).join('');const button=t=>tree.root.findAllByType('button').find(b=>text(b)===t);const search=()=>tree.root.findByProps({'aria-label':'البحث عن طالب لإضافته للحلقة'});const checks=()=>tree.root.findAllByProps({className:'encounter-member-list'})[0].findAllByType('input');
+for(const kind of ['quran','religion']){circle.kind=kind;added=[];posts=0;
 await act(async()=>{tree=Renderer.create(React.createElement(Workspace,{data:{user:{id:'t',role:'primary'},mosque_id:'m',circles:[circle],students},mineOnly:true}))});await act(async()=>tree.root.findByProps({className:'panel circle-session-card'}).findAllByType('button')[0].props.onClick());await act(async()=>button('إضافة طلاب للحلقة').props.onClick());
 assert.deepEqual(checks().map(c=>text(c.parent)),['أحمد محمد','زينب حسن','محمد علي']);
+await act(async()=>search().props.onChange({target:{value:'احمد'}}));assert.equal(checks().length,1);await act(async()=>checks()[0].props.onChange({target:{checked:true}}));
+await act(async()=>tree.root.findByProps({'aria-label':'إغلاق إضافة الطلاب للحلقة'}).props.onClick());assert.equal(posts,0);assert.equal(tree.root.findAllByProps({role:'dialog'}).length,0);await act(async()=>button('إضافة طلاب للحلقة').props.onClick());assert.equal(search().props.value,'');assert.ok(checks().every(c=>!c.props.checked));
 await act(async()=>search().props.onChange({target:{value:'احمد'}}));assert.equal(checks().length,1);await act(async()=>checks()[0].props.onChange({target:{checked:true}}));
 await act(async()=>search().props.onChange({target:{value:'زينب'}}));await act(async()=>checks()[0].props.onChange({target:{checked:true}}));
 await act(async()=>search().props.onChange({target:{value:'لايوجد'}}));assert.equal(checks().length,0);assert.ok(JSON.stringify(tree.toJSON()).includes('لا يوجد طلاب مطابقون'));
 await act(async()=>search().props.onChange({target:{value:''}}));assert.deepEqual(checks().map(c=>c.props.checked),[true,true,false]);
 await act(async()=>search().props.onChange({target:{value:'علي محمد'}}));assert.equal(checks().length,1);assert.ok(text(checks()[0].parent).includes('محمد علي'));
 await act(async()=>button('حفظ إضافة الطلاب').props.onClick());assert.deepEqual(added.sort(),['a','z']);assert.equal(posts,1);assert.equal(tree.root.findAllByProps({role:'dialog'}).length,0);
-await act(async()=>tree.unmount());console.log('PASS: Arabic alphabetical order, name/word filtering, alif normalization, no matches, hidden selections retained and saved together.');
+await act(async()=>tree.unmount());}
+console.log('PASS: both circle types; X closes without saving and discards pending selections; Arabic alphabetical order, name/word filtering, alif normalization, no matches, hidden selections retained and saved together.');
