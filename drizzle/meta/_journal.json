@@ -85,6 +85,13 @@
       "when": 1794124532763,
       "tag": "0011_encounter_tajweed",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1794173956415,
+      "tag": "0012_individual_score_scale",
+      "breakpoints": true
     }
   ]
 }

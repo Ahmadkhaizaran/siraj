@@ -7,3 +7,5 @@ Run `weekly-credentials.mjs` with `SIRAJ_TEST_DATABASE=postgres` and `PGLITE_MOD
 Other standalone test files cover scheduling, scroll ownership, reader data, notification policy, supervision, beta-slot rules, themes and assistant navigation. `postgres-harness.mjs` is a helper.
 
 The older `integration.mjs` retains historical expectations (teacher-visible student login codes, teacher standalone writes and student password changes). Those expectations contradict the current role model; the current API acceptance suite is `weekly-credentials.mjs`. Do not change current authorization to satisfy the historical fixture.
+
+Individual encounter saves: `individual-student-save.mjs` verifies the current isolated API contract and score normalization without external feed requests. `individual-student-ui.mjs` verifies that saving one student leaves other drafts intact and blank attendance becomes absence. The older encounter-confirm entry point now delegates to this current UI scenario. Legacy bulk-finalized encounters remain immutable for compatibility.
