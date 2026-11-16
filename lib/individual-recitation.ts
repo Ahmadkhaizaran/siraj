@@ -26,7 +26,7 @@ export async function individualRecitation(ctx:any){
  }
  const key='beta:individual-recitation:'+mid;
  const stored=await q('SELECT value FROM settings WHERE key=?',key).first();
- const state=stored?JSON.parse(stored.value):{slots:[],responses:{}};
+ const state:any=stored?JSON.parse(stored.value):{slots:[],responses:{},evaluations:{}};
  const students=await rows("SELECT id,name FROM students WHERE mosque_id=? AND status='active'",mid);
  const teachers=await rows("SELECT id,name,phone FROM users WHERE mosque_id=? AND active=1 AND cancelled_at IS NULL AND role IN ('primary','supervisor','teacher')",mid);
  if(studentAccess){
@@ -34,13 +34,26 @@ export async function individualRecitation(ctx:any){
   if(feature?.value!=='enabled')fail(403,'التسميع الفردي غير مفعّل لهذه الجهة');
   const student=await q('SELECT id FROM students WHERE id=? AND mosque_id=? AND status=?',user.student_id,mid,'active').first();
   if(!student)fail(403,'حساب الطالب غير مفعّل');
-  if(method==='GET')return json({slots:state.slots.filter((s:Slot)=>s.student_id===student.id),responses:Object.fromEntries(Object.entries(state.responses).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),today:beirutDay()});
+  if(method==='GET')return json({slots:state.slots.filter((s:Slot)=>s.student_id===student.id),responses:Object.fromEntries(Object.entries(state.responses).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),evaluations:Object.fromEntries(Object.entries(state.evaluations||{}).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),today:beirutDay()});
   if(method!=='POST'||body.action!=='respond')fail(403,'يمكن للطالب تأكيد حضوره أو الاعتذار فقط');
   if(!state.slots.some((s:Slot)=>s.id===body.id&&s.student_id===student.id))fail(403,'هذا الموعد ليس ضمن حسابك');
  }
  if(method==='GET')return json({...state,students,teachers,today:beirutDay()});
  if(method!=='POST')fail(405,'العملية غير متاحة');
- if(body.action==='save'){
+ if(body.action==='evaluate'){
+  if(studentAccess)fail(403,'تقييم التسميع من صلاحيات المعلم أو الإدارة');
+  const slot=state.slots.find((s:Slot)=>s.id===body.id);if(!slot)fail(404,'الموعد غير موجود');
+  if(user.role!=='admin'&&user.role!=='primary'&&slot.teacher_id!==user.id)fail(403,'هذا اللقاء ليس ضمن صلاحياتك');
+  const day=text(body.day,'التاريخ',10);
+  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(day)||!Number.isFinite(Date.parse(day+'T12:00:00Z'))||new Date(day+'T12:00:00Z').getUTCDay()!==slot.weekday||day>beirutDay())fail(400,'اختر تاريخ لقاء صحيحًا ليس في المستقبل');
+  const axes=['memorization','retention','tajweed','performance'];
+  const scores:Record<string,number>={};
+  for(const axis of axes){const value=body.scores?.[axis];if(value===undefined||value===null||value==='')continue;const n=Number(value);if(!Number.isInteger(n)||n<0||n>5)fail(400,'علامة كل محور يجب أن تكون بين صفر وخمسة');scores[axis]=n}
+  if(!Object.keys(scores).length)fail(400,'اختر محور تقييم واحدًا على الأقل');
+  const notes=text(body.notes||'','الملاحظات',1000,false);
+  state.evaluations=state.evaluations||{};
+  state.evaluations[slot.id+':'+day]={scores,notes,teacher_id:user.id,updated_at:new Date().toISOString()};
+ }else if(body.action==='save'){
   if(studentAccess)fail(403,'لا يمكن للطالب تعديل المواعيد');
   const slot:Slot={id:body.id?text(body.id,'الموعد',80):crypto.randomUUID(),student_id:text(body.student_id,'الطالب',80),teacher_id:text(body.teacher_id,'المعلّم',80),weekday:Number(body.weekday),minute:Number(body.minute),duration:body.duration==null?30:Number(body.duration)};
   if(body.id&&!state.slots.some((s:Slot)=>s.id===slot.id))fail(404,'الموعد غير موجود');
