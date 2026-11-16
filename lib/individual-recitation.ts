@@ -19,6 +19,8 @@ export async function individualRecitation(ctx:any){
  const q=(sql:string,...args:any[])=>db.prepare(sql).bind(...args);
  const rows=async(sql:string,...args:any[])=>(await q(sql,...args).all()).results||[];
  const studentAccess=user.role==='student'&&user.mosque_id===mid;
+ const enabledRow=await q('SELECT value FROM settings WHERE key=?','feature:individual-recitation:'+mid).first();
+ if(enabledRow?.value!=='enabled')fail(403,'التسميع الفردي التجريبي غير مفعّل لهذه الجهة');
  if(user.role!=='admin'&&!studentAccess){
   if(!['primary','supervisor'].includes(user.role)||user.mosque_id!==mid)fail(403,'ليس لديك صلاحية استخدام التسميع الفردي لهذه الجهة');
   const enabled=await q('SELECT value FROM settings WHERE key=?','feature:individual-recitation:'+mid).first();
