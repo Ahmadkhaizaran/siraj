@@ -19,12 +19,8 @@ export async function individualRecitation(ctx:any){
  const q=(sql:string,...args:any[])=>db.prepare(sql).bind(...args);
  const rows=async(sql:string,...args:any[])=>(await q(sql,...args).all()).results||[];
  const studentAccess=user.role==='student'&&user.mosque_id===mid;
- const enabledRow=await q('SELECT value FROM settings WHERE key=?','feature:individual-recitation:'+mid).first();
- if(enabledRow?.value!=='enabled')fail(403,'التسميع الفردي التجريبي غير مفعّل لهذه الجهة');
  if(user.role!=='admin'&&!studentAccess){
   if(!['primary','supervisor'].includes(user.role)||user.mosque_id!==mid)fail(403,'ليس لديك صلاحية استخدام التسميع الفردي لهذه الجهة');
-  const enabled=await q('SELECT value FROM settings WHERE key=?','feature:individual-recitation:'+mid).first();
-  if(enabled?.value!=='enabled')fail(403,'التسميع الفردي غير مفعّل لهذه الجهة');
  }
  const key='beta:individual-recitation:'+mid;
  const stored=await q('SELECT value FROM settings WHERE key=?',key).first();
@@ -32,8 +28,6 @@ export async function individualRecitation(ctx:any){
  const students=await rows("SELECT id,name FROM students WHERE mosque_id=? AND status='active'",mid);
  const teachers=await rows("SELECT id,name,phone FROM users WHERE mosque_id=? AND active=1 AND cancelled_at IS NULL AND role IN ('primary','supervisor','teacher')",mid);
  if(studentAccess){
-  const feature=await q('SELECT value FROM settings WHERE key=?','feature:individual-recitation:'+mid).first();
-  if(feature?.value!=='enabled')fail(403,'التسميع الفردي غير مفعّل لهذه الجهة');
   const student=await q('SELECT id FROM students WHERE id=? AND mosque_id=? AND status=?',user.student_id,mid,'active').first();
   if(!student)fail(403,'حساب الطالب غير مفعّل');
   if(method==='GET')return json({slots:state.slots.filter((s:Slot)=>s.student_id===student.id).map((s:Slot)=>({...s,teacher_name:teachers.find((t:any)=>t.id===s.teacher_id)?.name||'المعلم'})),responses:Object.fromEntries(Object.entries(state.responses).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),evaluations:Object.fromEntries(Object.entries(state.evaluations||{}).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),today:beirutDay()});
