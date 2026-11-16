@@ -18,7 +18,8 @@ export async function individualRecitation(ctx:any){
  const mid=text(method==='GET'?params.get('mosque'):body.mosque_id,'الجهة',80);await mosqueExists(mid);
  const q=(sql:string,...args:any[])=>db.prepare(sql).bind(...args);
  const rows=async(sql:string,...args:any[])=>(await q(sql,...args).all()).results||[];
- if(user.role!=='admin'){
+ const studentAccess=user.role==='student'&&user.mosque_id===mid;
+ if(user.role!=='admin'&&!studentAccess){
   if(!['primary','supervisor'].includes(user.role)||user.mosque_id!==mid)fail(403,'ليس لديك صلاحية استخدام التسميع الفردي لهذه الجهة');
   const enabled=await q('SELECT value FROM settings WHERE key=?','feature:individual-recitation:'+mid).first();
   if(enabled?.value!=='enabled')fail(403,'التسميع الفردي غير مفعّل لهذه الجهة');
@@ -28,9 +29,17 @@ export async function individualRecitation(ctx:any){
  const state=stored?JSON.parse(stored.value):{slots:[],responses:{}};
  const students=await rows("SELECT id,name FROM students WHERE mosque_id=? AND status='active'",mid);
  const teachers=await rows("SELECT id,name,phone FROM users WHERE mosque_id=? AND active=1 AND cancelled_at IS NULL AND role IN ('primary','supervisor','teacher')",mid);
+ if(studentAccess){
+  const student=await q('SELECT id FROM students WHERE id=? AND mosque_id=? AND status=?',user.student_id,mid,'active').first();
+  if(!student)fail(403,'حساب الطالب غير مفعّل');
+  if(method==='GET')return json({slots:state.slots.filter((s:Slot)=>s.student_id===student.id),responses:Object.fromEntries(Object.entries(state.responses).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),today:beirutDay()});
+  if(method!=='POST'||body.action!=='respond')fail(403,'يمكن للطالب تأكيد حضوره أو الاعتذار فقط');
+  if(!state.slots.some((s:Slot)=>s.id===body.id&&s.student_id===student.id))fail(403,'هذا الموعد ليس ضمن حسابك');
+ }
  if(method==='GET')return json({...state,students,teachers,today:beirutDay()});
  if(method!=='POST')fail(405,'العملية غير متاحة');
  if(body.action==='save'){
+  if(studentAccess)fail(403,'لا يمكن للطالب تعديل المواعيد');
   const slot:Slot={id:body.id?text(body.id,'الموعد',80):crypto.randomUUID(),student_id:text(body.student_id,'الطالب',80),teacher_id:text(body.teacher_id,'المعلّم',80),weekday:Number(body.weekday),minute:Number(body.minute),duration:body.duration==null?30:Number(body.duration)};
   if(body.id&&!state.slots.some((s:Slot)=>s.id===slot.id))fail(404,'الموعد غير موجود');
   if(!students.some((s:any)=>s.id===slot.student_id)||!teachers.some((t:any)=>t.id===slot.teacher_id))fail(400,'اختر طالبًا ومعلّمًا من الجهة نفسها');
@@ -40,6 +49,7 @@ export async function individualRecitation(ctx:any){
   state.slots=[...state.slots.filter((s:Slot)=>s.id!==slot.id),slot];
   if(body.id)for(const k of Object.keys(state.responses))if(k.startsWith(slot.id+':'))delete state.responses[k];
  }else if(body.action==='delete'){
+  if(studentAccess)fail(403,'لا يمكن للطالب حذف المواعيد');
   const sid=text(body.id,'الموعد',80);state.slots=state.slots.filter((s:Slot)=>s.id!==sid);
   for(const k of Object.keys(state.responses))if(k.startsWith(sid+':'))delete state.responses[k];
  }else if(body.action==='respond'){
