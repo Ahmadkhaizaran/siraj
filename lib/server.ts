@@ -335,7 +335,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const ps=await rows("SELECT p.*,s.name AS student_name,u.name AS teacher_name FROM progress p JOIN students s ON s.id=p.student_id LEFT JOIN users u ON u.id=p.created_by WHERE p.mosque_id=? AND s.status!='deleted'"+(isTeacher?" AND p.student_id IN (SELECT s.id FROM students s JOIN circles c ON c.id=s.circle_id WHERE s.mosque_id=? AND c.teacher_id=? AND c.status='active')":'')+' ORDER BY p.day DESC,p.created_at DESC'+(all?'':' LIMIT 150'),...vargs);
    const staff=isTeacher?[]:await rows("SELECT id,name,english_name,username,role,phone,student_id,active,mosque_id,created_at FROM users WHERE mosque_id=? AND cancelled_at IS NULL AND role!='student' ORDER BY created_at",mid);
    const act:Row[]=[]; // Staff membership and administrative activity are never exposed to institution users.
-   const individualEnabled=['primary','supervisor'].includes(user.role)&&(await one('SELECT value FROM settings WHERE key=?','feature:individual-recitation:'+mid))?.value==='enabled';
+   const individualEnabled=['primary','supervisor'].includes(user.role);
    return json({services,features:{individual_recitation:individualEnabled},user,mosques,mosque_id:mid,circles:services.circles===false?[]:cs,students:services.students===false?[]:ss,attendance:services.reports===false?[]:att,progress:services.learning===false||services.reports===false?[]:ps,staff:services.team===false?[]:staff,activity:act,date:day,exported_at:all?now():undefined});
   }
   if(path==='auth/password'&&method==='POST'){
