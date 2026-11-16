@@ -30,6 +30,8 @@ export async function individualRecitation(ctx:any){
  const students=await rows("SELECT id,name FROM students WHERE mosque_id=? AND status='active'",mid);
  const teachers=await rows("SELECT id,name,phone FROM users WHERE mosque_id=? AND active=1 AND cancelled_at IS NULL AND role IN ('primary','supervisor','teacher')",mid);
  if(studentAccess){
+  const feature=await q('SELECT value FROM settings WHERE key=?','feature:individual-recitation:'+mid).first();
+  if(feature?.value!=='enabled')fail(403,'التسميع الفردي غير مفعّل لهذه الجهة');
   const student=await q('SELECT id FROM students WHERE id=? AND mosque_id=? AND status=?',user.student_id,mid,'active').first();
   if(!student)fail(403,'حساب الطالب غير مفعّل');
   if(method==='GET')return json({slots:state.slots.filter((s:Slot)=>s.student_id===student.id),responses:Object.fromEntries(Object.entries(state.responses).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),today:beirutDay()});
@@ -47,7 +49,8 @@ export async function individualRecitation(ctx:any){
   try{validateSlot(slot,state.slots)}catch(e){fail(409,(e as Error).message)}
   if(state.slots.length>=500&&!body.id)fail(400,'بلغت الحد الأقصى للمواعيد');
   state.slots=[...state.slots.filter((s:Slot)=>s.id!==slot.id),slot];
-  if(body.id)for(const k of Object.keys(state.responses))if(k.startsWith(slot.id+':'))delete state.responses[k];
+  // Keep historical confirmations when a recurring weekly appointment is edited.
+  if(body.id)for(const k of Object.keys(state.responses))if(k.startsWith(slot.id+':')&&k.slice(slot.id.length+1)>=beirutDay())delete state.responses[k];
  }else if(body.action==='delete'){
   if(studentAccess)fail(403,'لا يمكن للطالب حذف المواعيد');
   const sid=text(body.id,'الموعد',80);state.slots=state.slots.filter((s:Slot)=>s.id!==sid);
