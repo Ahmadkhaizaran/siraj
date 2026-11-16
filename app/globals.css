@@ -133,3 +133,9 @@ html[data-theme="dark"] .welcome-banner .art-dot{border-color:#e7c778}
 .encounter-memory-input [role=listbox]{display:grid;gap:4px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--white)}.encounter-memory-input [role=option]{text-align:right;padding:10px;border:0;background:var(--sage);border-radius:6px}.encounter-memory-input p{color:var(--muted)}
 
 .overview-about{margin-top:48px;padding-top:28px;border-top:1px solid var(--line);scroll-margin-top:24px}
+
+/* Responsive student rank progression */
+.rank-journey{display:flex;align-items:center;overflow-x:auto;}
+.rank-journey-step{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.rank-journey-arrow-vertical{display:none;}
+@media(max-width:640px){.rank-journey{flex-direction:column;align-items:center;overflow-x:visible;}.rank-journey-step{flex-direction:column;flex-shrink:1;width:100%;}.rank-journey-arrow-horizontal{display:none;}.rank-journey-arrow-vertical{display:block;}}
