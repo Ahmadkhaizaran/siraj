@@ -166,7 +166,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   if(isTeacher&&write&&['students','memorization','memorization-batch','assessments','attendance','progress','staff-credentials'].includes(path))fail(403,'حساب المدرّس للعرض؛ تسجيل الحفظ والعلامات متاح من لقاء الحلقة في موعده فقط');
   if(isStudent&&path==='auth/password')fail(403,'تغيير كلمة سر الطالب من صلاحيات المعلّم أو المشرف الأساسي فقط');
   if(isStudent&&write&&!['calendar/seen'].includes(path))fail(403,'حساب الطالب للعرض فقط');
-  if(isAdmin&&['students','circles','attendance','progress','export','student-profile','memorization','assessments','student-account','motivation','circle-session','circle-enrollments','circle-schedule'].includes(path))fail(403,'المتابعة التعليمية من صلاحيات إدارة المسجد أو المركز ومدرّسيه');
+  if(isAdmin&&['students','circles','attendance','progress','export','student-profile','memorization','assessments','student-account','motivation','circle-session','circle-enrollments','circle-schedule','circle-lesson'].includes(path))fail(403,'المتابعة التعليمية من صلاحيات إدارة المسجد أو المركز ومدرّسيه');
   const scope=(mosque:unknown)=>{const mid=text(mosque,'المسجد',80);if(!isAdmin&&mid!==user.mosque_id)fail(403,'ليس لديك صلاحية الوصول إلى هذا المسجد أو المركز');return mid;};
   const mosqueExists=async(mid:string)=>{if(!await one('SELECT id FROM mosques WHERE id=? AND cancelled_at IS NULL',mid))fail(404,'المسجد أو المركز غير موجود');};
   const circleAccess=async(cid:string,mid:string)=>{const c=await one("SELECT * FROM circles WHERE id=? AND mosque_id=? AND status='active'",cid,mid);if(!c)fail(404,'الحلقة غير موجودة في هذا المسجد أو المركز');if(isTeacher&&c!.teacher_id!==user.id)fail(403,'هذه الحلقة غير مسندة إليك');return c!;};
