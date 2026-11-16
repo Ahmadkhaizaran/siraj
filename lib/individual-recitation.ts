@@ -25,7 +25,7 @@ export async function individualRecitation(ctx:any){
  const key='beta:individual-recitation:'+mid;
  const stored=await q('SELECT value FROM settings WHERE key=?',key).first();
  const state:any=stored?JSON.parse(stored.value):{slots:[],responses:{},evaluations:{}};
- const students=await rows("SELECT id,name FROM students WHERE mosque_id=? AND status='active'",mid);
+ const students=await rows("SELECT s.id,s.name,n.number AS student_number FROM students s LEFT JOIN student_codes n ON n.student_id=s.id WHERE s.mosque_id=? AND s.status='active'",mid);
  const teachers=await rows("SELECT id,name,phone FROM users WHERE mosque_id=? AND active=1 AND cancelled_at IS NULL AND role IN ('primary','supervisor','teacher')",mid);
  if(studentAccess){
   const student=await q('SELECT id FROM students WHERE id=? AND mosque_id=? AND status=?',user.student_id,mid,'active').first();
@@ -47,8 +47,9 @@ export async function individualRecitation(ctx:any){
   for(const axis of axes){const value=body.scores?.[axis];if(value===undefined||value===null||value==='')continue;const n=Number(value);if(!Number.isInteger(n)||n<0||n>5)fail(400,'علامة كل محور يجب أن تكون بين صفر وخمسة');scores[axis]=n}
   if(!Object.keys(scores).length)fail(400,'اختر محور تقييم واحدًا على الأقل');
   const notes=text(body.notes||'','الملاحظات',1000,false);
+  const recited=text(body.recited||'','السورة أو الآيات المسمّعة',500,false);
   state.evaluations=state.evaluations||{};
-  state.evaluations[slot.id+':'+day]={scores,notes,teacher_id:user.id,updated_at:new Date().toISOString()};
+  state.evaluations[slot.id+':'+day]={scores,notes,recited,teacher_id:user.id,updated_at:new Date().toISOString()};
  }else if(body.action==='save'){
   if(studentAccess)fail(403,'لا يمكن للطالب تعديل المواعيد');
   const slot:Slot={id:body.id?text(body.id,'الموعد',80):crypto.randomUUID(),student_id:text(body.student_id,'الطالب',80),teacher_id:text(body.teacher_id,'المعلّم',80),weekday:Number(body.weekday),minute:Number(body.minute),duration:body.duration==null?30:Number(body.duration)};
