@@ -30,6 +30,17 @@ export async function circleSession(ctx:Row){
   await db.batch([q('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',policyKey,JSON.stringify(next)),q('UPDATE circles SET schedule=? WHERE id=?',label,cid),q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',crypto.randomUUID(),mid,user.id,'حُدّد موعد تقييم حلقة '+circle.name,new Date().toISOString())]);
   return json({ok:true});
  }
+ if(path==='circle-lesson'){
+  if(method!=='POST')fail(405,'العملية غير متاحة');
+  if(circle.teacher_id!==user.id&&user.role!=='primary')fail(403,'تعديل محتوى الدرس متاح للمدرّس المسؤول أو المشرف الأساسي فقط');
+  const lessonDay=date(body.date);
+  const lessonTitle=text(body.title,'عنوان الدرس',180,false);
+  const lessonContent=text(body.content,'محتوى الدرس',3000,false);
+  if(!lessonTitle&&lessonContent)fail(400,'أدخل عنوان الدرس أولًا');
+  const key='circle-lesson:'+cid+':'+lessonDay;
+  await q('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',key,JSON.stringify({title:lessonTitle,content:lessonContent,updated_by:user.id,updated_at:new Date().toISOString()})).run();
+  return json({ok:true});
+ }
  const member="(s.circle_id=? OR EXISTS (SELECT 1 FROM circle_enrollments ce WHERE ce.student_id=s.id AND ce.circle_id=?))";
  if(path==='circle-enrollments'){
   if(method!=='POST')fail(405,'العملية غير متاحة');
@@ -49,6 +60,8 @@ export async function circleSession(ctx:Row){
  const session=await one('SELECT id,day,revision,updated_at FROM circle_sessions WHERE circle_id=? AND day=?',cid,day);
  const weekday=new Date(day+'T12:00:00Z').getUTCDay(),weekStart=addDays(day,-((weekday+6)%7)),weekEnd=addDays(weekStart,6);
  const weeklySession=await one('SELECT id FROM circle_sessions WHERE circle_id=? AND day>=? AND day<=? LIMIT 1',cid,weekStart,weekEnd);
+ const lessonRow=await one('SELECT value FROM settings WHERE key=?','circle-lesson:'+cid+':'+day);
+ const lesson=lessonRow?JSON.parse(lessonRow.value):{title:'',content:''};
  const individualMode=!!await one('SELECT value FROM settings WHERE key=?','circle-individual:'+sessionId);
  const individual=body.individual===true;
  const window=await circleWindow(schedule,day,!!weeklySession&&!individualMode);
@@ -60,7 +73,7 @@ export async function circleSession(ctx:Row){
   const encounters=await rows('SELECT cs.day,cs.revision,(SELECT COUNT(*) FROM circle_records cr WHERE cr.session_id=cs.id) AS students_count FROM circle_sessions cs WHERE cs.circle_id=? ORDER BY cs.day DESC LIMIT 90',cid);
   const memory=await rows('SELECT m.student_id,m.surah,m.ranges,m.revision FROM memorization m JOIN students s ON s.id=m.student_id WHERE s.mosque_id=?',mid);
   const upcoming=schedule?scheduledCircleDay(schedule.weekday):null;
-  return json({individual_mode:individualMode,circle,date:day,next_date:upcoming===day&&upcoming===beirutDay()&&weeklySession&&!individualMode?addDays(upcoming,7):upcoming,revision:session?.revision||0,students:students.map(s=>({...s,student_code:user.role==='teacher'?undefined:s.student_code,memory:memory.filter(m=>m.student_id===s.id).map(m=>({...m,ranges:JSON.parse(m.ranges)})),record:records.find(r=>r.student_id===s.id)?{...records.find(r=>r.student_id===s.id),memory_updates:JSON.parse(memoryChanges.find(m=>m.key==='circle-memory:'+sessionId+':'+s.id)?.value||'[]')}:null})),member_ids:members.map(s=>s.id),encounters,schedule,window,can_record:circle.teacher_id===user.id&&window.open,can_enroll:user.role==='primary'});
+  return json({individual_mode:individualMode,lesson,circle,date:day,next_date:upcoming===day&&upcoming===beirutDay()&&weeklySession&&!individualMode?addDays(upcoming,7):upcoming,revision:session?.revision||0,students:students.map(s=>({...s,student_code:user.role==='teacher'?undefined:s.student_code,memory:memory.filter(m=>m.student_id===s.id).map(m=>({...m,ranges:JSON.parse(m.ranges)})),record:records.find(r=>r.student_id===s.id)?{...records.find(r=>r.student_id===s.id),memory_updates:JSON.parse(memoryChanges.find(m=>m.key==='circle-memory:'+sessionId+':'+s.id)?.value||'[]')}:null})),member_ids:members.map(s=>s.id),encounters,schedule,window,can_record:circle.teacher_id===user.id&&window.open,can_enroll:user.role==='primary'});
  }
  if(method!=='POST')fail(405,'العملية غير متاحة');
  if(circle.teacher_id!==user.id)fail(403,'تسجيل حضور وتقييمات الحلقة خاص بالمدرّس أو المشرف المسندة إليه');
