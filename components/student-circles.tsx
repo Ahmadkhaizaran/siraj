@@ -21,9 +21,9 @@ export default function StudentCircles({student,mosqueId}:{student:Row;mosqueId:
    const hour=Math.floor(slot.minute/60)%12||12;
    const time=hour+':'+String(slot.minute%60).padStart(2,'0')+(slot.minute<720?' صباحًا':' مساءً');
    return <article key={slot.id+day} className="panel" style={{padding:14,marginTop:12}}>
-    <strong>{day} · {time}</strong>
+    <strong>{day} · {time}</strong><p>المعلّم: {slot.teacher_name||'غير محدّد'}</p>
     <p>{response?.status==='confirmed'?'تم تأكيد الحضور':response?.status==='excused'?'تم تسجيل الاعتذار':'بانتظار تأكيد الحضور'}</p>
-    {evaluation&&<div><strong>تقييم التسميع</strong><p>{Object.entries(evaluation.scores||{}).map(([key,value])=>key+': '+value+'/5').join(' · ')}</p>{evaluation.notes&&<p>ملاحظة المعلم: {evaluation.notes}</p>}</div>}
+    {evaluation&&<div><strong>تقييم التسميع</strong>{evaluation.recited&&<p>ما تم تسميعه: {evaluation.recited}</p>}<p>{Object.entries(evaluation.scores||{}).map(([key,value])=>key+': '+value+'/5').join(' · ')}</p>{evaluation.notes&&<p>ملاحظة المعلم: {evaluation.notes}</p>}</div>}
     {!response&&<div className="staff-account-actions"><button className="btn primary" disabled={busy} onClick={()=>respond(slot,day,'confirmed')}>تأكيد الحضور</button><button className="btn secondary" disabled={busy} onClick={()=>{const reason=window.prompt('سبب الاعتذار');if(reason?.trim())respond(slot,day,'excused',reason.trim())}}>اعتذار</button></div>}
    </article>;
   })}</section>}
