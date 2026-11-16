@@ -36,7 +36,7 @@ export async function individualRecitation(ctx:any){
   if(feature?.value!=='enabled')fail(403,'التسميع الفردي غير مفعّل لهذه الجهة');
   const student=await q('SELECT id FROM students WHERE id=? AND mosque_id=? AND status=?',user.student_id,mid,'active').first();
   if(!student)fail(403,'حساب الطالب غير مفعّل');
-  if(method==='GET')return json({slots:state.slots.filter((s:Slot)=>s.student_id===student.id),responses:Object.fromEntries(Object.entries(state.responses).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),evaluations:Object.fromEntries(Object.entries(state.evaluations||{}).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),today:beirutDay()});
+  if(method==='GET')return json({slots:state.slots.filter((s:Slot)=>s.student_id===student.id).map((s:Slot)=>({...s,teacher_name:teachers.find((t:any)=>t.id===s.teacher_id)?.name||'المعلم'})),responses:Object.fromEntries(Object.entries(state.responses).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),evaluations:Object.fromEntries(Object.entries(state.evaluations||{}).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),today:beirutDay()});
   if(method!=='POST'||body.action!=='respond')fail(403,'يمكن للطالب تأكيد حضوره أو الاعتذار فقط');
   if(!state.slots.some((s:Slot)=>s.id===body.id&&s.student_id===student.id))fail(403,'هذا الموعد ليس ضمن حسابك');
  }
