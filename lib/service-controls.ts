@@ -10,14 +10,18 @@ export const SERVICES=[
  ['reports','التقارير الإشرافية','الحضور والغياب والحفظ والمتابعة والتصدير.'],
  ['certificates','الشهادات','إصدار الشهادات وعرض الشهادات الممنوحة.'],
  ['support','المراسلات','التواصل بين الجهات وإدارة المنصة.'],
+ ['hadith','حديث اليوم','بطاقة الحديث في النظرة العامة. موقوفة حتى تشغّلها من هنا.'],
  ['individual','التسميع الفردي','إيقاف التجربة للجهات المخوّلة؛ التشغيل لا يمنح صلاحية التجربة.'],
 ] as const;
 export type Service=typeof SERVICES[number][0];
 export type ServiceFlags=Partial<Record<Service,boolean>>;
 export type ServiceConfig={global:ServiceFlags;mosques:Record<string,{all:ServiceFlags;students:ServiceFlags;roles?:Record<string,ServiceFlags>;users?:Record<string,ServiceFlags>}>};
 export const CONTROL_KEY='service-controls:v1';
+// Services listed here stay off until the owner switches them on globally.
+export const DEFAULT_OFF:ReadonlySet<string>=new Set(['hadith']);
+export const globalOn=(config:ServiceConfig,key:Service)=>DEFAULT_OFF.has(key)?config.global[key]===true:config.global[key]!==false;
 export const emptyControls=():ServiceConfig=>({global:{},mosques:{}});
-export function enabled(config:ServiceConfig,key:Service,mid?:string|null,student=false,role?:string,uid?:string){const local=mid?config.mosques[mid]:undefined;return (!role||local?.roles?.[role]?.[key]!==false)&&(!uid||local?.users?.[uid]?.[key]!==false)&&config.global[key]!==false&&(!mid||config.mosques[mid]?.all?.[key]!==false&&(!student||config.mosques[mid]?.students?.[key]!==false));}
+export function enabled(config:ServiceConfig,key:Service,mid?:string|null,student=false,role?:string,uid?:string){const local=mid?config.mosques[mid]:undefined;return (!role||local?.roles?.[role]?.[key]!==false)&&(!uid||local?.users?.[uid]?.[key]!==false)&&globalOn(config,key)&&(!mid||config.mosques[mid]?.all?.[key]!==false&&(!student||config.mosques[mid]?.students?.[key]!==false));}
 export function effective(config:ServiceConfig,mid?:string|null,student=false,role?:string,uid?:string):ServiceFlags{return Object.fromEntries(SERVICES.map(([key])=>[key,enabled(config,key,mid,student,role,uid)]));}
 export function serviceForPage(page:string):Service|undefined{return ({race:'competition',quran:'quran',calendar:'calendar',learning:'learning',achievement:'learning',circles:'circles','my-circles':'circles',students:'students',team:'team',attendance:'reports',progress:'reports',reports:'reports',support:'support',broadcast:'support','individual-recitation':'individual'} as Record<string,Service>)[page];}
 export function serviceForRoute(path:string):Service|undefined{
