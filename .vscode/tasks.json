@@ -1,0 +1,26 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Siraj: auto-sync from GitHub",
+      "detail": "Pulls the latest changes from GitHub every 60 seconds while this folder is open. Fast-forward only, so it never overwrites local edits.",
+      "type": "shell",
+      "windows": {
+        "command": "powershell",
+        "args": ["-NoProfile", "-Command", "while ($true) { git pull --ff-only --quiet; Start-Sleep -Seconds 60 }"]
+      },
+      "osx": {
+        "command": "bash",
+        "args": ["-c", "while true; do git pull --ff-only --quiet; sleep 60; done"]
+      },
+      "linux": {
+        "command": "bash",
+        "args": ["-c", "while true; do git pull --ff-only --quiet; sleep 60; done"]
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true },
+      "runOptions": { "runOn": "folderOpen" }
+    }
+  ]
+}
