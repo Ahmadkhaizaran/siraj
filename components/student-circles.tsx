@@ -25,9 +25,16 @@ export default function StudentCircles({student,mosqueId}:{student:Row;mosqueId:
    return <article key={slot.id+day} className="panel" style={{padding:14,marginTop:12}}>
     <strong>{day} · {time}</strong><p>المعلّم: {slot.teacher_name||'غير محدّد'} · مدة التسميع {slot.duration||30} دقيقة</p>{slot.notes&&<p>ملاحظة: {slot.notes}</p>}{!response&&recitation?.reminders?.[slot.id+':'+day]&&<p className="learning-notice" role="status">تنبيه من الإدارة: الرجاء تأكيد حضورك أو الاعتذار عن هذا اللقاء.</p>}
     <p>{response?.status==='confirmed'?'تم تأكيد الحضور':response?.status==='excused'?'تم تسجيل الاعتذار':'بانتظار تأكيد الحضور'}</p>
-    {evaluation&&<div><strong>تقييم التسميع</strong>{evaluation.recited&&<p>ما تم تسميعه: {evaluation.recited}</p>}<p>{Object.entries(evaluation.scores||{}).map(([key,value])=>key+': '+value+'/5').join(' · ')}</p>{evaluation.notes&&<p>ملاحظة المعلم: {evaluation.notes}</p>}</div>}
+    {evaluation&&<RecitationEvaluation evaluation={evaluation}/>}
     {!response&&!started&&<div className="staff-account-actions"><button className="btn primary" disabled={busy} onClick={()=>respond(slot,day,'confirmed')}>تأكيد الحضور</button><button className="btn secondary" disabled={busy} onClick={()=>{const reason=window.prompt('سبب الاعتذار');if(reason?.trim())respond(slot,day,'excused',reason.trim())}}>اعتذار</button></div>}
    </article>;
   })}</section>}
+  {(()=>{const past=Object.entries(recitation?.evaluations||{}).map(([key,evaluation])=>{const i=key.lastIndexOf(':'),slot=(recitation?.slots||[]).find((x:Row)=>x.id===key.slice(0,i));return {key,day:key.slice(i+1),slot,evaluation:evaluation as Row}}).sort((a,b)=>b.day.localeCompare(a.day)).slice(0,12);
+   return past.length>0&&<section className="panel" style={{padding:20,marginTop:16}}><h3>تقييمات التسميع الفردي</h3><p>ما سجّله المعلّم بعد كل لقاء: ما تم تسميعه، العلامات، والملاحظات.</p>{past.map(({key,day,slot,evaluation})=><article key={key} className="panel" style={{padding:14,marginTop:12}}><strong>{day}{slot?.teacher_name?' · المعلّم: '+slot.teacher_name:''}</strong><RecitationEvaluation evaluation={evaluation}/></article>)}</section>})()}
  </section>;
+}
+const AXES:[string,string][]=[['memorization','الحفظ'],['retention','الثبات'],['tajweed','التجويد'],['performance','جودة التلاوة']];
+export function RecitationEvaluation({evaluation}:{evaluation:Row}){
+ const scores=AXES.filter(([key])=>evaluation.scores?.[key]!==undefined);
+ return <div className="recitation-evaluation">{evaluation.recited&&<p><strong>ما تم تسميعه:</strong> {evaluation.recited}</p>}{scores.length>0&&<ul className="recitation-scores">{scores.map(([key,label])=><li key={key}><span>{label}</span><strong>{evaluation.scores[key]} / ٥</strong></li>)}</ul>}{evaluation.notes&&<p><strong>ملاحظة المعلّم:</strong> {evaluation.notes}</p>}</div>;
 }
