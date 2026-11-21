@@ -165,7 +165,8 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   if(isStudent&&path==='export')fail(403,'تصدير بيانات الجهة متاح لإدارتها فقط');
   if(isTeacher&&write&&['students','memorization','memorization-batch','assessments','attendance','progress','staff-credentials'].includes(path))fail(403,'حساب المدرّس للعرض؛ تسجيل الحفظ والعلامات متاح من لقاء الحلقة في موعده فقط');
   if(isStudent&&path==='auth/password')fail(403,'تغيير كلمة سر الطالب من صلاحيات المعلّم أو المشرف الأساسي فقط');
-  if(isStudent&&write&&!['calendar/seen'].includes(path))fail(403,'حساب الطالب للعرض فقط');
+  // Students may only confirm or excuse individual recitation appointments; the handler limits them to action 'respond'.
+  if(isStudent&&write&&!['calendar/seen','individual-recitation'].includes(path))fail(403,'حساب الطالب للعرض فقط');
   if(isAdmin&&['students','circles','attendance','progress','export','student-profile','memorization','assessments','student-account','motivation','circle-session','circle-enrollments','circle-schedule','circle-lesson'].includes(path))fail(403,'المتابعة التعليمية من صلاحيات إدارة المسجد أو المركز ومدرّسيه');
   const scope=(mosque:unknown)=>{const mid=text(mosque,'المسجد',80);if(!isAdmin&&mid!==user.mosque_id)fail(403,'ليس لديك صلاحية الوصول إلى هذا المسجد أو المركز');return mid;};
   const mosqueExists=async(mid:string)=>{if(!await one('SELECT id FROM mosques WHERE id=? AND cancelled_at IS NULL',mid))fail(404,'المسجد أو المركز غير موجود');};
@@ -335,7 +336,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const ps=await rows("SELECT p.*,s.name AS student_name,u.name AS teacher_name FROM progress p JOIN students s ON s.id=p.student_id LEFT JOIN users u ON u.id=p.created_by WHERE p.mosque_id=? AND s.status!='deleted'"+(isTeacher?" AND p.student_id IN (SELECT s.id FROM students s JOIN circles c ON c.id=s.circle_id WHERE s.mosque_id=? AND c.teacher_id=? AND c.status='active')":'')+' ORDER BY p.day DESC,p.created_at DESC'+(all?'':' LIMIT 150'),...vargs);
    const staff=isTeacher?[]:await rows("SELECT id,name,english_name,username,role,phone,student_id,active,mosque_id,created_at FROM users WHERE mosque_id=? AND cancelled_at IS NULL AND role!='student' ORDER BY created_at",mid);
    const act:Row[]=[]; // Staff membership and administrative activity are never exposed to institution users.
-   const individualEnabled=['primary','supervisor'].includes(user.role);
+   const individualEnabled=['primary','supervisor','teacher'].includes(user.role);
    return json({services,features:{individual_recitation:individualEnabled},user,mosques,mosque_id:mid,circles:services.circles===false?[]:cs,students:services.students===false?[]:ss,attendance:services.reports===false?[]:att,progress:services.learning===false||services.reports===false?[]:ps,staff:services.team===false?[]:staff,activity:act,date:day,exported_at:all?now():undefined});
   }
   if(path==='auth/password'&&method==='POST'){

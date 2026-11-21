@@ -1,5 +1,11 @@
 import {beirutDay} from './islamic-calendar';
-export type Slot={id:string;student_id:string;teacher_id:string;weekday:number;minute:number;duration?:number};
+export type Slot={id:string;student_id:string;teacher_id:string;weekday:number;minute:number;duration?:number;notes?:string};
+// Next free start for a teacher on a weekday: right after the teacher's last appointment, keeping that appointment's duration.
+export function suggestNext(slots:Slot[],teacher_id:string,weekday:number){
+ const mine=slots.filter(s=>s.teacher_id===teacher_id&&s.weekday===weekday);if(!mine.length)return null;
+ const last=mine.reduce((a,b)=>a.minute+(a.duration??30)>=b.minute+(b.duration??30)?a:b),minute=last.minute+(last.duration??30),duration=last.duration??30;
+ return minute+duration<=1440?{minute,duration}:null;
+}
 export function validateSlot(slot:Slot,slots:Slot[]){
  const duration=slot.duration??30;
  if(!Number.isInteger(duration)||duration<1||duration>1440)throw Error('مدة التسميع يجب أن تكون عددًا صحيحًا من الدقائق بين 1 و1440');
@@ -22,26 +28,32 @@ export async function individualRecitation(ctx:any){
  if(user.role!=='admin'&&!studentAccess){
   if(!['primary','supervisor','teacher'].includes(user.role)||user.mosque_id!==mid)fail(403,'ليس لديك صلاحية استخدام التسميع الفردي لهذه الجهة');
  }
+ // Storage key kept from the beta so existing schedules survive the launch.
  const key='beta:individual-recitation:'+mid;
  const stored=await q('SELECT value FROM settings WHERE key=?',key).first();
- const state:any=stored?JSON.parse(stored.value):{slots:[],responses:{},evaluations:{}};
- const students=await rows("SELECT s.id,s.name,n.number AS student_number FROM students s LEFT JOIN student_codes n ON n.student_id=s.id WHERE s.mosque_id=? AND s.status='active'",mid);
+ const state:any=stored?JSON.parse(stored.value):{slots:[],responses:{},evaluations:{},reminders:{}};state.reminders=state.reminders||{};
+ const students=await rows("SELECT s.id,s.name,s.contact,s.contact_mode,n.number AS student_number FROM students s LEFT JOIN student_codes n ON n.student_id=s.id WHERE s.mosque_id=? AND s.status='active'",mid);
  const teachers=await rows("SELECT id,name,phone FROM users WHERE mosque_id=? AND active=1 AND cancelled_at IS NULL AND role IN ('primary','supervisor','teacher')",mid);
  if(studentAccess){
   const student=await q('SELECT id FROM students WHERE id=? AND mosque_id=? AND status=?',user.student_id,mid,'active').first();
   if(!student)fail(403,'حساب الطالب غير مفعّل');
-  if(method==='GET')return json({slots:state.slots.filter((s:Slot)=>s.student_id===student.id).map((s:Slot)=>({...s,teacher_name:teachers.find((t:any)=>t.id===s.teacher_id)?.name||'المعلم'})),responses:Object.fromEntries(Object.entries(state.responses).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),evaluations:Object.fromEntries(Object.entries(state.evaluations||{}).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),today:beirutDay()});
+  const own=(o:Record<string,any>)=>Object.fromEntries(Object.entries(o||{}).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':'))));
+  if(method==='GET')return json({reminders:own(state.reminders),slots:state.slots.filter((s:Slot)=>s.student_id===student.id).map((s:Slot)=>({...s,teacher_name:teachers.find((t:any)=>t.id===s.teacher_id)?.name||'المعلم'})),responses:Object.fromEntries(Object.entries(state.responses).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),evaluations:Object.fromEntries(Object.entries(state.evaluations||{}).filter(([key])=>state.slots.some((s:Slot)=>s.student_id===student.id&&key.startsWith(s.id+':')))),today:beirutDay()});
   if(method!=='POST'||body.action!=='respond')fail(403,'يمكن للطالب تأكيد حضوره أو الاعتذار فقط');
   if(!state.slots.some((s:Slot)=>s.id===body.id&&s.student_id===student.id))fail(403,'هذا الموعد ليس ضمن حسابك');
  }
- if(method==='GET')return json(user.role==='teacher'?{...state,slots:state.slots.filter((s:Slot)=>s.teacher_id===user.id),students,teachers,today:beirutDay()}:{...state,students,teachers,today:beirutDay()});
+ if(method==='GET'){
+  if(user.role!=='teacher')return json({...state,students,teachers,today:beirutDay()});
+  const slots=state.slots.filter((s:Slot)=>s.teacher_id===user.id),pick=(o:Record<string,any>)=>Object.fromEntries(Object.entries(o||{}).filter(([key])=>slots.some((s:Slot)=>key.startsWith(s.id+':'))));
+  return json({slots,responses:pick(state.responses),evaluations:pick(state.evaluations),reminders:pick(state.reminders),students:students.map((s:any)=>({id:s.id,name:s.name,student_number:s.student_number})),teachers,today:beirutDay()});
+ }
  if(method!=='POST')fail(405,'العملية غير متاحة');
  if(body.action==='evaluate'){
   if(studentAccess)fail(403,'تقييم التسميع من صلاحيات المعلم أو الإدارة');
   const slot=state.slots.find((s:Slot)=>s.id===body.id);if(!slot)fail(404,'الموعد غير موجود');
   if(user.role!=='admin'&&user.role!=='primary'&&slot.teacher_id!==user.id)fail(403,'هذا اللقاء ليس ضمن صلاحياتك');
   const day=text(body.day,'التاريخ',10);
-  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(day)||!Number.isFinite(Date.parse(day+'T12:00:00Z'))||new Date(day+'T12:00:00Z').getUTCDay()!==slot.weekday||day>beirutDay())fail(400,'اختر تاريخ لقاء صحيحًا ليس في المستقبل');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(Date.parse(day+'T12:00:00Z'))||new Date(day+'T12:00:00Z').toISOString().slice(0,10)!==day||new Date(day+'T12:00:00Z').getUTCDay()!==slot.weekday||day>beirutDay())fail(400,'اختر تاريخ لقاء صحيحًا ليس في المستقبل');
   const axes=['memorization','retention','tajweed','performance'];
   const scores:Record<string,number>={};
   for(const axis of axes){const value=body.scores?.[axis];if(value===undefined||value===null||value==='')continue;const n=Number(value);if(!Number.isInteger(n)||n<0||n>5)fail(400,'علامة كل محور يجب أن تكون بين صفر وخمسة');scores[axis]=n}
@@ -53,6 +65,7 @@ export async function individualRecitation(ctx:any){
  }else if(body.action==='save'){
   if(studentAccess||user.role==='teacher')fail(403,'لا يمكنك تعديل المواعيد');
   const slot:Slot={id:body.id?text(body.id,'الموعد',80):crypto.randomUUID(),student_id:text(body.student_id,'الطالب',80),teacher_id:text(body.teacher_id,'المعلّم',80),weekday:Number(body.weekday),minute:Number(body.minute),duration:body.duration==null?30:Number(body.duration)};
+  const notes=text(body.notes||'','ملاحظات للطالب',500,false).trim();if(notes)slot.notes=notes;
   if(body.id&&!state.slots.some((s:Slot)=>s.id===slot.id))fail(404,'الموعد غير موجود');
   if(!students.some((s:any)=>s.id===slot.student_id)||!teachers.some((t:any)=>t.id===slot.teacher_id))fail(400,'اختر طالبًا ومعلّمًا من الجهة نفسها');
   if(!teachers.find((t:any)=>t.id===slot.teacher_id)?.phone)fail(400,'أضف رقم هاتف المعلّم إلى حسابه أولًا');
@@ -60,11 +73,18 @@ export async function individualRecitation(ctx:any){
   if(state.slots.length>=500&&!body.id)fail(400,'بلغت الحد الأقصى للمواعيد');
   state.slots=[...state.slots.filter((s:Slot)=>s.id!==slot.id),slot];
   // Keep historical confirmations when a recurring weekly appointment is edited.
-  if(body.id)for(const k of Object.keys(state.responses))if(k.startsWith(slot.id+':')&&k.slice(slot.id.length+1)>=beirutDay())delete state.responses[k];
+  if(body.id)for(const bucket of [state.responses,state.reminders])for(const k of Object.keys(bucket))if(k.startsWith(slot.id+':')&&k.slice(slot.id.length+1)>=beirutDay())delete bucket[k];
  }else if(body.action==='delete'){
   if(studentAccess||user.role==='teacher')fail(403,'لا يمكنك حذف المواعيد');
   const sid=text(body.id,'الموعد',80);state.slots=state.slots.filter((s:Slot)=>s.id!==sid);
-  for(const k of Object.keys(state.responses))if(k.startsWith(sid+':'))delete state.responses[k];
+  for(const bucket of [state.responses,state.reminders])for(const k of Object.keys(bucket))if(k.startsWith(sid+':'))delete bucket[k];
+ }else if(body.action==='remind'){
+  if(studentAccess||user.role==='teacher')fail(403,'إرسال التنبيه من صلاحيات المشرف');
+  const slot=state.slots.find((s:Slot)=>s.id===body.id);if(!slot)fail(404,'الموعد غير موجود');
+  const day=text(body.day,'التاريخ',10);if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(Date.parse(day+'T12:00:00Z'))||new Date(day+'T12:00:00Z').toISOString().slice(0,10)!==day||new Date(day+'T12:00:00Z').getUTCDay()!==slot.weekday)fail(400,'التاريخ لا يطابق يوم الموعد');
+  const k=slot.id+':'+day;if(state.responses[k])fail(409,'ردّ الطالب على هذا اللقاء، لا حاجة للتنبيه');
+  if(Date.now()>=beirutStart(day,slot.minute))fail(409,'بدأ اللقاء أو انتهى؛ لا يمكن إرسال تنبيه');
+  state.reminders[k]={at:new Date().toISOString(),by:user.id,count:(state.reminders[k]?.count||0)+1};
  }else if(body.action==='respond'){
   if(!studentAccess)fail(403,'تأكيد الحضور أو الاعتذار من حساب الطالب فقط');
   const slot=state.slots.find((s:Slot)=>s.id===body.id);if(!slot)fail(404,'الموعد غير موجود');
@@ -74,7 +94,7 @@ export async function individualRecitation(ctx:any){
   if(!['confirmed','excused'].includes(body.status))fail(400,'اختر تأكيد الحضور أو الاعتذار');
   if(body.status==='excused'&&!canExcuse(day,slot.minute))fail(409,'انتهت مهلة الاعتذار قبل اللقاء بنصف ساعة. تواصل مع المعلّم على رقمه.');
   const reason=body.status==='excused'?text(body.reason,'سبب الاعتذار',500):'';
-  state.responses[k]={status:body.status,reason,updated_at:new Date().toISOString()};
+  state.responses[k]={status:body.status,reason,updated_at:new Date().toISOString()};delete state.reminders[k];
  }else fail(400,'عملية غير صالحة');
  const value=JSON.stringify(state);
  const result=stored?await q('UPDATE settings SET value=? WHERE key=? AND value=?',value,key,stored.value).run():await q('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)',key,value).run();

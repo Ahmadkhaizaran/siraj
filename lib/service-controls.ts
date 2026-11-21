@@ -11,7 +11,7 @@ export const SERVICES=[
  ['certificates','الشهادات','إصدار الشهادات وعرض الشهادات الممنوحة.'],
  ['support','المراسلات','التواصل بين الجهات وإدارة المنصة.'],
  ['hadith','حديث اليوم','بطاقة الحديث في النظرة العامة. موقوفة حتى تشغّلها من هنا.'],
- ['individual','التسميع الفردي','إيقاف التجربة للجهات المخوّلة؛ التشغيل لا يمنح صلاحية التجربة.'],
+ ['individual','التسميع الفردي','مواعيد التسميع الفردي وتأكيد الحضور والتقييم.'],
 ] as const;
 export type Service=typeof SERVICES[number][0];
 export type ServiceFlags=Partial<Record<Service,boolean>>;
