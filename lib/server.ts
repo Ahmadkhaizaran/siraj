@@ -52,15 +52,16 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   const one=(sql:string,...args:any[])=>q(sql,...args).first<Row>();
   const path=new URL(req.url).pathname.replace(/^\/api\//,'');
   const method=req.method;
+  const bodyLimit=path==='circle-lesson-pdf'?4250000:450000;
   const write=!['GET','HEAD'].includes(method);
   if(write){
    const origin=req.headers.get('origin');
    if(!origin||origin!==new URL(req.url).origin)fail(403,'الطلب غير مسموح من هذا المصدر');
    if(!req.headers.get('content-type')?.includes('application/json'))fail(415,'صيغة الطلب غير صالحة');
-   const length=Number(req.headers.get('content-length')||0);if(length>450000)fail(413,'حجم الطلب كبير جدًا');
+   const length=Number(req.headers.get('content-length')||0);if(length>bodyLimit)fail(413,'حجم الطلب كبير جدًا');
   }
   let body:Row={};
-  if(write){const raw=await req.text();if(raw.length>450000)fail(413,'حجم الطلب كبير جدًا');try{body=JSON.parse(raw)}catch{fail(400,'تعذّر قراءة الطلب')}if(!body||typeof body!=='object'||Array.isArray(body))fail(400,'طلب غير صالح');}
+  if(write){const raw=await req.text();if(raw.length>bodyLimit)fail(413,'حجم الطلب كبير جدًا');try{body=JSON.parse(raw)}catch{fail(400,'تعذّر قراءة الطلب')}if(!body||typeof body!=='object'||Array.isArray(body))fail(400,'طلب غير صالح');}
   const initialized=async()=>!!await one("SELECT key FROM settings WHERE key='initialized'");
   const pepper=()=>env.SIRAJ_PASSWORD_PEPPER||fail(503,'إعداد تسجيل الدخول غير مكتمل');
   const throttle=async(key:string,max:number)=>{
@@ -161,14 +162,14 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   }
   const service=serviceForRoute(path);
   if(service&&services[service]===false)fail(403,'هذه الخدمة موقوفة من إدارة المنصة');
-  if(path==='circle-session'&&services.learning===false)fail(403,'خدمة الحفظ والتقييم موقوفة');
+  if((path==='circle-session'||path==='circle-weekly-report'||path==='circle-lesson-pdf')&&services.learning===false)fail(403,'خدمة الحفظ والتقييم موقوفة');
   if(path==='calendar'&&method==='GET')return json(await communityFeed(db,user));
   if(isStudent&&path==='export')fail(403,'تصدير بيانات الجهة متاح لإدارتها فقط');
   if(isTeacher&&write&&['students','memorization','memorization-batch','assessments','attendance','progress','staff-credentials'].includes(path))fail(403,'حساب المدرّس للعرض؛ تسجيل الحفظ والعلامات متاح من لقاء الحلقة في موعده فقط');
   if(isStudent&&path==='auth/password')fail(403,'تغيير كلمة سر الطالب من صلاحيات المعلّم أو المشرف الأساسي فقط');
   // Students may only confirm or excuse individual recitation appointments; the handler limits them to action 'respond'.
   if(isStudent&&write&&!['calendar/seen','individual-recitation'].includes(path))fail(403,'حساب الطالب للعرض فقط');
-  if(isAdmin&&['students','circles','attendance','progress','export','student-profile','memorization','assessments','student-account','motivation','circle-session','circle-enrollments','circle-schedule','circle-lesson'].includes(path))fail(403,'المتابعة التعليمية من صلاحيات إدارة المسجد أو المركز ومدرّسيه');
+  if(isAdmin&&['students','circles','attendance','progress','export','student-profile','memorization','assessments','student-account','motivation','circle-session','circle-enrollments','circle-schedule','circle-lesson','circle-weekly-report','circle-lesson-pdf'].includes(path))fail(403,'المتابعة التعليمية من صلاحيات إدارة المسجد أو المركز ومدرّسيه');
   const scope=(mosque:unknown)=>{const mid=text(mosque,'المسجد',80);if(!isAdmin&&mid!==user.mosque_id)fail(403,'ليس لديك صلاحية الوصول إلى هذا المسجد أو المركز');return mid;};
   const mosqueExists=async(mid:string)=>{if(!await one('SELECT id FROM mosques WHERE id=? AND cancelled_at IS NULL',mid))fail(404,'المسجد أو المركز غير موجود');};
   const circleAccess=async(cid:string,mid:string)=>{const c=await one("SELECT * FROM circles WHERE id=? AND mosque_id=? AND status='active'",cid,mid);if(!c)fail(404,'الحلقة غير موجودة في هذا المسجد أو المركز');if(isTeacher&&c!.teacher_id!==user.id)fail(403,'هذه الحلقة غير مسندة إليك');return c!;};
@@ -413,7 +414,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    statements.push(q('DELETE FROM sessions WHERE user_id=?',target.id),audit(mid,'حُدّث حساب '+name));
    await db.batch(statements);return json({ok:true});
   }
-  if(['circle-session','circle-enrollments','circle-schedule','circle-lesson'].includes(path))return await circleSession({db,user,body,params,method,path,scope,circleAccess,mosqueExists,text,date,fail,json});
+  if(['circle-session','circle-enrollments','circle-schedule','circle-lesson','circle-weekly-report','circle-lesson-pdf'].includes(path))return await circleSession({db,user,body,params,method,path,scope,circleAccess,mosqueExists,text,date,fail,json});
   if(path==='circles'&&['POST','PATCH'].includes(method)){
    if(!manager)fail(403,'إدارة الحلقات وتعيين مدرّسيها من صلاحيات المشرف الأساسي');
    const mid=scope(body.mosque_id);await mosqueExists(mid);

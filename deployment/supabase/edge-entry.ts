@@ -35,7 +35,8 @@ Deno.serve(async request=>{
     headers.set('cf-connecting-ip',request.headers.get('x-siraj-client-ip')||'unknown');
     const write=!['GET','HEAD'].includes(request.method);
     const body=write?await request.text():undefined;
-    if(body&&body.length>450000)return new Response(null,{status:413});
+    const bodyLimit=url.pathname==='/api/circle-lesson-pdf'?4250000:450000;
+    if(body&&body.length>bodyLimit)return new Response(null,{status:413});
     return await handle(new Request(url,{method:request.method,headers,body}),{
       DB,SIRAJ_PASSWORD_PEPPER:request.headers.get('x-siraj-password-pepper')||'',
       SIRAJ_SETUP_TOKEN_HASH:request.headers.get('x-siraj-setup-hash')||'',

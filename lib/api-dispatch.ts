@@ -17,10 +17,11 @@ export async function dispatch(req:Request){
   for(const name of ['cookie','content-type','origin']){
     const value=req.headers.get(name);if(value)headers.set(name,value);
   }
+  const bodyLimit=new URL(req.url).pathname==='/api/circle-lesson-pdf'?4250000:450000;
   const write=!['GET','HEAD'].includes(req.method);
-  if(write&&Number(req.headers.get('content-length')||0)>450000)return Response.json({error:'حجم الطلب كبير جدًا'},{status:413});
+  if(write&&Number(req.headers.get('content-length')||0)>bodyLimit)return Response.json({error:'حجم الطلب كبير جدًا'},{status:413});
   const body=write?await req.text():undefined;
-  if(body&&body.length>450000)return Response.json({error:'حجم الطلب كبير جدًا'},{status:413});
+  if(body&&body.length>bodyLimit)return Response.json({error:'حجم الطلب كبير جدًا'},{status:413});
   try{
     const result=await fetch(backend,{method:req.method,headers,body,cache:'no-store',redirect:'error',signal:AbortSignal.timeout(55000)});
     const out=new Headers({'cache-control':'no-store','x-content-type-options':'nosniff'});

@@ -17,6 +17,58 @@ async function request(path:string,body?:Row){
  const r=await fetchWithDeadline('/api/'+path,{method:body?'POST':'GET',cache:'no-store',credentials:'same-origin',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
  const d:any=await r.json();if(!r.ok)throw Error(d.error||'تعذّر تحميل اللقاء');return d;
 }
+function CircleMaterials({mosque,circle,day,report,pdfName,canUpload}:{mosque:string;circle:string;day:string;report:{week:string;text:string;version:string}|null;pdfName:string|null;canUpload:boolean}){
+ const [draft,setDraft]=useState(report?.text||''),[version,setVersion]=useState(report?.version||'');
+ const [name,setName]=useState(pdfName),[file,setFile]=useState<File|null>(null);
+ const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const target={mosque_id:mosque,circle_id:circle,date:day};
+ async function perform(task:()=>Promise<void>){
+  setBusy(true);setError('');setNotice('');
+  try{await task()}catch(e){setError((e as Error).message)}finally{setBusy(false)}
+ }
+ return <>
+  {report&&<form className="panel modal-form" style={{marginBottom:16}} onSubmit={e=>{e.preventDefault();void perform(async()=>{
+   const result=await request('circle-weekly-report',{...target,report:draft,version});
+   setVersion(result.version);setNotice('تم حفظ التقرير الأسبوعي.');
+  })}}>
+   <h2>تقرير المشرف الأسبوعي</h2>
+   <p>أسبوع {report.week}</p>
+   <label className="field"><span>تقييم الحلقة وملاحظات المشرف</span><textarea rows={4} required maxLength={5000} value={draft} disabled={busy} onChange={e=>setDraft(e.target.value)}/></label>
+   <button className="btn primary" disabled={busy||!draft.trim()}>حفظ التقرير الأسبوعي</button>
+  </form>}
+  {(name||canUpload)&&<form className="panel modal-form" style={{marginBottom:16}} onSubmit={e=>{
+   e.preventDefault();const input=e.currentTarget;
+   if(!file)return;
+   void perform(async()=>{
+    if(file.size>3*1024*1024)throw Error('الحد الأقصى للملف ٣ ميغابايت.');
+    const data=await new Promise<string>((resolve,reject)=>{
+     const reader=new FileReader();
+     reader.onload=()=>resolve(String(reader.result).split(',')[1]);
+     reader.onerror=()=>reject(Error('تعذّرت قراءة الملف.'));
+     reader.readAsDataURL(file);
+    });
+    const result=await request('circle-lesson-pdf',{...target,name:file.name,base64:data});
+    setName(result.name);setFile(null);input.reset();setNotice('تم حفظ ملف الدرس.');
+   });
+  }}>
+   <h2>ملف الدرس الديني</h2>
+   {name&&<button type="button" className="btn secondary" disabled={busy} onClick={()=>void perform(async()=>{
+    const query=new URLSearchParams({mosque,circle_id:circle,date:day});
+    const result=await request('circle-lesson-pdf?'+query);
+    const bytes=Uint8Array.from(atob(result.base64),char=>char.charCodeAt(0));
+    const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+    const link=document.createElement('a');link.href=url;link.download=result.name;link.click();
+    window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+   })}>تنزيل {name}</button>}
+   {canUpload&&<>
+    <label className="field"><span>{name?'استبدال ملف الـ PDF':'إرفاق ملف PDF'}</span><input type="file" accept=".pdf,application/pdf" disabled={busy} onChange={e=>setFile(e.target.files?.[0]||null)}/><small>الحد الأقصى ٣ ميغابايت.</small></label>
+    <button className="btn primary" disabled={busy||!file}>حفظ ملف الدرس</button>
+   </>}
+  </form>}
+  {error&&<p className="error" role="alert">{error}</p>}
+  {notice&&<p className="learning-notice" role="status">{notice}</p>}
+ </>;
+}
 export default function CircleWorkspace({data,mineOnly=false,onCreate,onEdit,onSaved}:{data:Row;mineOnly?:boolean;onCreate?:()=>void;onEdit?:(circle:Row)=>void;onSaved?:()=>void}){
 
  const [memoryErrors,setMemoryErrors]=useState<Record<string,string>>({}),[enrolling,setEnrolling]=useState(false),[enrollmentSearch,setEnrollmentSearch]=useState('');
@@ -70,6 +122,7 @@ export default function CircleWorkspace({data,mineOnly=false,onCreate,onEdit,onS
  const title=encounterDate?new Date(encounterDate+'T12:00:00').toLocaleDateString('ar-LB',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):'جارٍ تحميل موعد الحلقة';
  return <section className="circle-workspace"><button className="text-button" disabled={busy} onClick={()=>setSelected('')}><ArrowRight size={17}/>العودة إلى {mineOnly?'حلقاتي':'الحلقات'}</button>{session?.can_enroll&&<button type="button" className="btn secondary" onClick={()=>{setEnrollmentSearch('');setEnrolling(true)}}>إضافة طلاب للحلقة</button>}{enrolling&&<div className="overlay"><section className="modal" role="dialog" aria-modal="true" aria-label="إضافة طلاب للحلقة"><header><h2>إضافة طلاب للحلقة</h2><button type="button" className="icon-btn" aria-label="إغلاق إضافة الطلاب للحلقة" disabled={busy} onClick={closeEnrollment}><X size={20}/></button></header><div className="modal-form"><p>يمكن إضافة الطالب حتى لو كان في حلقة أخرى؛ عضويته هناك تبقى كما هي.</p><label className="field"><span>البحث عن طالب بالاسم</span><input type="search" autoFocus aria-label="البحث عن طالب لإضافته للحلقة" placeholder="اكتب اسم الطالب أو جزءًا منه…" value={enrollmentSearch} onChange={e=>setEnrollmentSearch(e.target.value)}/></label><p role="status">{enrollmentStudents.length} نتيجة · {members.length} طالب محدّد</p>{!enrollmentStudents.length&&<p>لا يوجد طلاب مطابقون للبحث.</p>}<div className="encounter-member-list">{enrollmentStudents.map((s:Row)=><label key={s.id}><input type="checkbox" disabled={busy||session?.member_ids.includes(s.id)} checked={members.includes(s.id)} onChange={e=>setMembers(a=>e.target.checked?[...a,s.id]:a.filter(id=>id!==s.id))}/>{s.name}{session?.member_ids.includes(s.id)&&<small>مضاف مسبقًا</small>}</label>)}</div>{error&&<p className="error" role="alert">{error}</p>}<footer className="modal-footer"><button type="button" className="btn secondary" disabled={busy} onClick={closeEnrollment}>إغلاق</button><button type="button" className="btn primary" disabled={busy} onClick={saveMembers}>حفظ إضافة الطلاب</button></footer></div></section></div>}<div className="page-heading"><div><span className="eyebrow">{circle.teacher_name||'لم يُعيّن المدرّس'}</span><h1>{circle.name}</h1><p>لقاء {title} · بتوقيت لبنان</p></div></div><div className="panel encounter-toolbar"><CalendarDays size={23}/><div><strong>{weeklyLabel}</strong><p>التقييم متاح في يوم الحلقة فقط، من ١٢ منتصف الليل حتى نهاية اليوم بتوقيت بيروت. احفظ كل طالب من بطاقته بشكل مستقل.</p>{session?.next_date&&<small>موعد اللقاء الأسبوعي: {session.next_date}</small>}</div>{day&&<button type="button" className="btn secondary" disabled={busy} onClick={()=>setDay('')}>العودة إلى الموعد الأسبوعي</button>}</div>
  {session?.can_enroll&&<details className="panel encounter-enrollment"><summary>موعد الحلقة الأسبوعي</summary><p>حدّد يوم الحلقة وموعدها الأسبوعي بتوقيت بيروت. يفتح التقييم طوال يوم الحلقة فقط، بغضّ النظر عن ساعة اللقاء، ويُقفل تقييم كل طالب بعد حفظه أو بانتهاء اليوم.</p><div className="rank-period"><label className="field"><span>يوم الحلقة</span><select value={policy.weekday} onChange={e=>setPolicy(p=>({...p,weekday:Number(e.target.value)}))}>{WEEKDAYS.map((n,i)=><option key={n} value={i}>{n}</option>)}</select></label><label className="field"><span>موعد اللقاء</span><select value={policy.mode} onChange={e=>setPolicy(p=>({...p,mode:e.target.value}))}><option value="day">دون ساعة محددة</option><option value="clock">ساعة محدّدة للقاء</option><option value="prayer">بعد أذان صلاة — صيدا</option></select></label>{policy.mode==='clock'&&<label className="field"><span>ساعة اللقاء</span><input type="time" value={policy.time} onChange={e=>setPolicy(p=>({...p,time:e.target.value}))}/></label>}{policy.mode==='prayer'&&<><label className="field"><span>الصلاة</span><select value={policy.prayer} onChange={e=>setPolicy(p=>({...p,prayer:e.target.value}))}>{[['Fajr','الفجر'],['Dhuhr','الظهر'],['Asr','العصر'],['Maghrib','المغرب'],['Isha','العشاء']].map(([v,n])=><option key={v} value={v}>{n}</option>)}</select></label><label className="field"><span>دقائق بعد الأذان</span><input type="number" min={0} max={180} value={policy.delay} onChange={e=>setPolicy(p=>({...p,delay:Number(e.target.value)}))}/></label></>}</div><button className="btn secondary" disabled={busy} onClick={async()=>{setBusy(true);setError('');try{await request('circle-schedule',{mosque_id:mid,circle_id:selected,schedule:policy});await reload();onSaved?.();setNotice('حُفظ جدول الحلقة الأسبوعي')}catch(e){setError((e as Error).message)}finally{setBusy(false)}}}>حفظ موعد الحلقة</button></details>}
+ {session&&<CircleMaterials key={selected+':'+encounterDate} mosque={mid} circle={selected} day={encounterDate} report={session.weekly_report} pdfName={session.lesson_pdf} canUpload={session.circle.kind==='religion'&&(circle.teacher_id===data.user.id||data.user.role==='primary')}/>}
  <section className="panel" style={{padding:20,marginBottom:16}}><h2>عنوان الدرس ومحتواه</h2><p>معلومات مستقلة عن العلامات، مرتبطة بهذا اللقاء وتاريخه.</p><label className="field"><span>عنوان الدرس</span><input value={lessonTitle} maxLength={180} disabled={busy||!session||(circle.teacher_id!==data.user.id&&data.user.role!=='primary')} onChange={e=>setLessonTitle(e.target.value)} placeholder="مثال: أحكام الطهارة"/></label><label className="field"><span>محتوى الدرس</span><textarea value={lessonContent} maxLength={3000} rows={3} disabled={busy||!session||(circle.teacher_id!==data.user.id&&data.user.role!=='primary')} onChange={e=>setLessonContent(e.target.value)} placeholder="ملخص الموضوع والنقاط التي تم شرحها"/></label>{(circle.teacher_id===data.user.id||data.user.role==='primary')&&<button className="btn secondary" disabled={busy||!session} onClick={async()=>{setBusy(true);setError('');try{await request('circle-lesson',{mosque_id:mid,circle_id:selected,date:encounterDate,title:lessonTitle,content:lessonContent});setNotice('حُفظ عنوان الدرس ومحتواه دون تغيير التقييمات')}catch(e){setError((e as Error).message)}finally{setBusy(false)}}}>حفظ معلومات الدرس</button>}</section>
  {future&&<p className="info-strip">لقاء قادم: يمكنك مراجعة قائمة الطلاب الآن، وتسجيل الحضور والعلامات في يوم اللقاء.</p>}
  {!future&&session&&(!session.can_record||encounterDate!==today)&&<p className="info-strip">{encounterDate!==today?'انتهى يوم الحلقة؛ هذا السجل للعرض فقط.':session.window?.reason||'هذا السجل للعرض فقط'}</p>}

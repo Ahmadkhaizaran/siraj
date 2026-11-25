@@ -18,6 +18,38 @@ export async function circleSession(ctx:Row){
  const cid=text(method==='GET'?params.get('circle_id'):body.circle_id,'الحلقة',80);
  const circle=await circleAccess(cid,mid);
  circle.kind=(await one('SELECT value FROM settings WHERE key=?','circle-kind:'+cid))?.value||circleKind(circle);
+ const weekOf=(day:string)=>addDays(day,-((new Date(day+'T12:00:00Z').getUTCDay()+6)%7));
+ const reportKey=(day:string)=>'circle-weekly-report:'+cid+':'+weekOf(day);
+ const pdfKey=(day:string)=>'circle-lesson-pdf:'+cid+':'+day;
+ const canReport=['primary','supervisor'].includes(user.role);
+ if(path==='circle-weekly-report'){
+  if(method!=='POST')fail(405,'طريقة غير متاحة');
+  if(!canReport)fail(403,'حفظ التقرير الأسبوعي متاح للمشرفين فقط');
+  const day=date(body.date),report=text(body.report,'التقرير الأسبوعي',5000);
+  const key=reportKey(day);
+  const value=JSON.stringify({report,author:user.name,updated_at:new Date().toISOString()});
+  const result=body.version
+   ?await q('UPDATE settings SET value=? WHERE key=? AND value=?',value,key,body.version).run()
+   :await q('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO NOTHING',key,value).run();
+  if(result.meta.changes!==1)fail(409,'تغيّر التقرير. أعد تحميل الصفحة قبل الحفظ.');
+  return json({ok:true,version:value});
+ }
+ if(path==='circle-lesson-pdf'){
+  if(circle.kind!=='religion')fail(400,'إرفاق PDF متاح في حلقات الدروس الدينية');
+  const day=date(method==='GET'?params.get('date'):body.date),key=pdfKey(day);
+  if(method==='GET'){
+   const file=await one('SELECT value FROM settings WHERE key=?',key);
+   if(!file)fail(404,'لم يُرفق ملف لهذا الدرس');
+   return json(JSON.parse(file!.value));
+  }
+  if(method!=='POST')fail(405,'طريقة غير متاحة');
+  if(user.role!=='primary'&&circle.teacher_id!==user.id)fail(403,'رفع الملف متاح للمدرّس المسؤول أو المشرف الأساسي');
+  const name=text(body.name,'اسم الملف',180),base64=body.base64;
+  if(typeof base64!=='string'||base64.length>4194304||!/^JVBERi0[A-Za-z0-9+/]*={0,2}$/.test(base64)||base64.length%4!==0||!/\.pdf$/i.test(name))fail(400,'اختر ملف PDF صالحًا بحجم لا يتجاوز ٣ ميغابايت');
+  const upsert='INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value';
+  await db.batch([q(upsert,key,JSON.stringify({name,base64})),q(upsert,key+':name',name)]);
+  return json({ok:true,name});
+ }
  const policyKey='circle-schedule:'+cid;
  const policy=await one('SELECT value FROM settings WHERE key=?',policyKey);
  let schedule:CircleSchedule|null=null;try{if(policy)schedule=validateSchedule(JSON.parse(policy.value))}catch{}
@@ -58,7 +90,7 @@ export async function circleSession(ctx:Row){
  const day=date(method==='GET'?params.get('date')||(schedule?scheduledCircleDay(schedule.weekday):beirutDay()):body.date);
  const sessionId=cid+':'+day;
  const session=await one('SELECT id,day,revision,updated_at FROM circle_sessions WHERE circle_id=? AND day=?',cid,day);
- const weekday=new Date(day+'T12:00:00Z').getUTCDay(),weekStart=addDays(day,-((weekday+6)%7)),weekEnd=addDays(weekStart,6);
+ const weekStart=weekOf(day),weekEnd=addDays(weekStart,6);
  const weeklySession=await one('SELECT id FROM circle_sessions WHERE circle_id=? AND day>=? AND day<=? LIMIT 1',cid,weekStart,weekEnd);
  const lessonRow=await one('SELECT value FROM settings WHERE key=?','circle-lesson:'+cid+':'+day);
  const lesson=lessonRow?JSON.parse(lessonRow.value):{title:'',content:''};
@@ -73,7 +105,9 @@ export async function circleSession(ctx:Row){
   const encounters=await rows('SELECT cs.day,cs.revision,(SELECT COUNT(*) FROM circle_records cr WHERE cr.session_id=cs.id) AS students_count FROM circle_sessions cs WHERE cs.circle_id=? ORDER BY cs.day DESC LIMIT 90',cid);
   const memory=await rows('SELECT m.student_id,m.surah,m.ranges,m.revision FROM memorization m JOIN students s ON s.id=m.student_id WHERE s.mosque_id=?',mid);
   const upcoming=schedule?scheduledCircleDay(schedule.weekday):null;
-  return json({individual_mode:individualMode,lesson,circle,date:day,next_date:upcoming===day&&upcoming===beirutDay()&&weeklySession&&!individualMode?addDays(upcoming,7):upcoming,revision:session?.revision||0,students:students.map(s=>({...s,student_code:user.role==='teacher'?undefined:s.student_code,memory:memory.filter(m=>m.student_id===s.id).map(m=>({...m,ranges:JSON.parse(m.ranges)})),record:records.find(r=>r.student_id===s.id)?{...records.find(r=>r.student_id===s.id),memory_updates:JSON.parse(memoryChanges.find(m=>m.key==='circle-memory:'+sessionId+':'+s.id)?.value||'[]')}:null})),member_ids:members.map(s=>s.id),encounters,schedule,window,can_record:circle.teacher_id===user.id&&window.open,can_enroll:user.role==='primary'});
+  const report=canReport?await one('SELECT value FROM settings WHERE key=?',reportKey(day)):null;
+  const pdf=circle.kind==='religion'?await one('SELECT value FROM settings WHERE key=?',pdfKey(day)+':name'):null;
+  return json({individual_mode:individualMode,lesson,weekly_report:canReport?{week:weekStart,text:report?JSON.parse(report.value).report:'',version:report?.value||''}:null,lesson_pdf:pdf?.value||null,circle,date:day,next_date:upcoming===day&&upcoming===beirutDay()&&weeklySession&&!individualMode?addDays(upcoming,7):upcoming,revision:session?.revision||0,students:students.map(s=>({...s,student_code:user.role==='teacher'?undefined:s.student_code,memory:memory.filter(m=>m.student_id===s.id).map(m=>({...m,ranges:JSON.parse(m.ranges)})),record:records.find(r=>r.student_id===s.id)?{...records.find(r=>r.student_id===s.id),memory_updates:JSON.parse(memoryChanges.find(m=>m.key==='circle-memory:'+sessionId+':'+s.id)?.value||'[]')}:null})),member_ids:members.map(s=>s.id),encounters,schedule,window,can_record:circle.teacher_id===user.id&&window.open,can_enroll:user.role==='primary'});
  }
  if(method!=='POST')fail(405,'العملية غير متاحة');
  if(circle.teacher_id!==user.id)fail(403,'تسجيل حضور وتقييمات الحلقة خاص بالمدرّس أو المشرف المسندة إليه');
