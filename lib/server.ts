@@ -4,13 +4,14 @@ import {parseMemoryUpdates,memoryStatement,checkedMemoryBatch,circleKind} from '
 import {parseInitialMemory,type InitialMemory} from './initial-memory';
 import {studentCertificates} from './student-certificates';
 import {supervisionReport} from './supervision-report';
-import {individualRecitation} from './individual-recitation';
+import {beirutStart,individualRecitation} from './individual-recitation';
 import {sealStudentPassword,openStudentPassword,readablePassword} from './credential-vault';
 import {circleSession} from './circle-sessions';
 import { defaultRuntime, type SirajRuntime } from './server-runtime';
 import { digest, equal, hashPassword, verifyPassword, token } from './auth-crypto';
 import { communityFeed } from './community-server';
-import { beirutDay } from './islamic-calendar';
+import {scheduledCircleDay,validateSchedule} from './circle-window';
+import { addDays,beirutDay } from './islamic-calendar';
 import { SURAHS, normalizeRanges } from './quran';
 import {notificationSince} from './notification-policy';
 import {rankFor} from './student-ranks';
@@ -395,7 +396,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    statements.push(q('DELETE FROM sessions WHERE user_id=?',target.id),audit(mid,'حُدّث حساب '+name));
    await db.batch(statements);return json({ok:true});
   }
-  if(['circle-session','circle-enrollments','circle-schedule'].includes(path))return await circleSession({db,user,body,params,method,path,scope,circleAccess,mosqueExists,text,date,fail,json});
+  if(['circle-session','circle-enrollments','circle-schedule','circle-lesson'].includes(path))return await circleSession({db,user,body,params,method,path,scope,circleAccess,mosqueExists,text,date,fail,json});
   if(path==='circles'&&['POST','PATCH'].includes(method)){
    if(!manager)fail(403,'إدارة الحلقات وتعيين مدرّسيها من صلاحيات المشرف الأساسي');
    const mid=scope(body.mosque_id);await mosqueExists(mid);
@@ -513,6 +514,44 @@ export async function handle(req:Request,runtime?:SirajRuntime){
     const points=weeklyPoints(records);return json({certificate_access:['primary','supervisor'].includes(user.role)?'manage':isStudent?'student':'none',records,points,rank:rankFor(points),student:await one('SELECT id,name FROM students WHERE id=?',sid),mosque:await one('SELECT name,logo FROM mosques WHERE id=?',mid)});
    }
    fail(400,'سجّل التقييم من لقاء الحلقة في قسم حلقاتي؛ ملف الطالب يعرض سجله فقط');
+  }
+  if(path==='student-circle-appointments'&&method==='GET'){
+   if(!isStudent||services.circles===false)fail(403,'هذه الخدمة غير متاحة');
+   const mid=scope(user.mosque_id),sid=text(user.student_id,'الطالب',80),student=await studentAccess(sid,mid);
+   const stamp=Date.now(),today=beirutDay(new Date(stamp));
+   const circles=await rows(`SELECT c.id,c.name,c.schedule,u.name AS teacher_name,st.value AS schedule_config
+    FROM circles c LEFT JOIN users u ON u.id=c.teacher_id AND u.active=1 AND u.cancelled_at IS NULL
+    LEFT JOIN settings st ON st.key='circle-schedule:'||c.id
+    WHERE c.mosque_id=? AND c.status='active' AND (c.id=? OR EXISTS
+    (SELECT 1 FROM circle_enrollments ce WHERE ce.circle_id=c.id AND ce.student_id=?)) ORDER BY c.name`,mid,student.circle_id,sid);
+   const readLesson=(value?:string)=>{
+    if(!value)return null;
+    try{const lesson=JSON.parse(value);return {title:String(lesson?.title||''),content:String(lesson?.content||'')}}catch{return null}
+   };
+   const appointments=await Promise.all(circles.map(async ({schedule_config,...circle})=>{
+    let policy:ReturnType<typeof validateSchedule>|null=null;
+    try{if(schedule_config)policy=validateSchedule(JSON.parse(schedule_config))}catch{}
+    if(!policy)return {...circle,day:null,minute:null,lesson:null};
+    let day=scheduledCircleDay(policy.weekday,today);
+    const minute=policy.mode==='clock'?Number(policy.time!.slice(0,2))*60+Number(policy.time!.slice(3)):null;
+    if(minute!==null&&beirutStart(day,minute)<stamp)day=addDays(day,7);
+    const lesson=await one('SELECT value FROM settings WHERE key=?','circle-lesson:'+circle.id+':'+day);
+    return {...circle,day,minute,lesson:readLesson(lesson?.value)};
+   }));
+   const history=await rows(`SELECT c.id AS circle_id,c.name AS circle_name,cs.day,cr.status,lesson.value AS lesson_value
+    FROM circle_records cr JOIN circle_sessions cs ON cs.id=cr.session_id JOIN circles c ON c.id=cs.circle_id
+    LEFT JOIN settings lesson ON lesson.key='circle-lesson:'||c.id||':'||cs.day
+    WHERE cr.student_id=? AND c.mosque_id=? AND cs.day<=?
+    UNION ALL
+    SELECT c.id,c.name,substr(lesson.key,-10),NULL,lesson.value
+    FROM circle_enrollments ce JOIN circles c ON c.id=ce.circle_id
+    JOIN settings lesson ON substr(lesson.key,1,length('circle-lesson:'||c.id||':'))='circle-lesson:'||c.id||':'
+    WHERE ce.student_id=? AND c.mosque_id=? AND substr(lesson.key,-10)>=substr(ce.created_at,1,10)
+    AND substr(lesson.key,-10)<? AND NOT EXISTS
+    (SELECT 1 FROM circle_sessions cs JOIN circle_records cr ON cr.session_id=cs.id
+     WHERE cs.circle_id=c.id AND cs.day=substr(lesson.key,-10) AND cr.student_id=ce.student_id)
+    ORDER BY day DESC,circle_name`,sid,mid,today,sid,mid,today);
+   return json({appointments,history:history.map(({lesson_value,...entry})=>({...entry,status:entry.status,lesson:readLesson(lesson_value)})).filter(entry=>entry.status||entry.lesson?.title)});
   }
   if(path==='student-profile'&&method==='GET'){
    const mid=scope(params.get('mosque')||user.mosque_id),sid=text(params.get('student_id'),'الطالب',80);await studentAccess(sid,mid);
