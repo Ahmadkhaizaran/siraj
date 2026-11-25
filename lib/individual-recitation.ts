@@ -28,6 +28,7 @@ export function nextRecitationDay(slot:Slot,now=Date.now()){
 function matchesRecitationDay(day:string,slot:Slot){
  return /^\d{4}-\d{2}-\d{2}$/.test(day)&&Number.isFinite(Date.parse(day+'T12:00:00Z'))&&new Date(day+'T12:00:00Z').toISOString().slice(0,10)===day&&new Date(day+'T12:00:00Z').getUTCDay()===slot.weekday;
 }
+export const RECITATION_REPLY_CHANGES=3;
 export function canExcuse(day:string,minute:number,now=Date.now()){return now<beirutStart(day,minute)-30*60000}
 export async function individualRecitation(ctx:any){
  const {db,user,body,params,method,fail,json,mosqueExists,text}=ctx;
@@ -59,6 +60,7 @@ export async function individualRecitation(ctx:any){
  }
  if(method!=='POST')fail(405,'العملية غير متاحة');
  let startsOn:string|undefined;
+ let savedReply:{status:'confirmed'|'excused';changes_used:number}|undefined;
  if(body.action==='evaluate'){
   if(studentAccess)fail(403,'تقييم التسميع من صلاحيات المعلم أو الإدارة');
   const slot=state.slots.find((s:Slot)=>s.id===body.id);if(!slot)fail(404,'الموعد غير موجود');
@@ -108,16 +110,20 @@ export async function individualRecitation(ctx:any){
   const slot=state.slots.find((s:Slot)=>s.id===body.id);if(!slot)fail(404,'الموعد غير موجود');
   const day=text(body.day,'التاريخ',10);if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(Date.parse(day+'T12:00:00Z'))||new Date(day+'T12:00:00Z').toISOString().slice(0,10)!==day||new Date(day+'T12:00:00Z').getUTCDay()!==slot.weekday)fail(400,'التاريخ لا يطابق يوم الموعد');
   if(slot.starts_on&&day<slot.starts_on)fail(400,'هذا التاريخ يسبق أول لقاء');
-  const k=slot.id+':'+day;if(state.responses[k]?.status==='excused')fail(409,'تم الاعتذار عن هذا اللقاء ولا يمكن تغيير الرد');
+  const k=slot.id+':'+day;
+  const previous=state.responses[k],changesUsed=previous?.changes_used??0;
   if(Date.now()>=beirutStart(day,slot.minute))fail(409,'بدأ اللقاء؛ تواصل مع المعلّم');
   if(!['confirmed','excused'].includes(body.status))fail(400,'اختر تأكيد الحضور أو الاعتذار');
-  if(state.responses[k]&&!canExcuse(day,slot.minute))fail(409,'يتوقف تعديل الرد قبل الموعد بثلاثين دقيقة');
+  if(previous?.status===body.status)return json({ok:true,reply:{status:previous.status,changes_used:changesUsed}});
+  if(changesUsed>=RECITATION_REPLY_CHANGES)fail(409,'استُخدمت فرص تعديل الرد الثلاث');
+  if(previous&&!canExcuse(day,slot.minute))fail(409,'يتوقف تعديل الرد قبل الموعد بثلاثين دقيقة');
   if(body.status==='excused'&&!canExcuse(day,slot.minute))fail(409,'انتهت مهلة الاعتذار قبل اللقاء بنصف ساعة. تواصل مع المعلّم على رقمه.');
   const reason=body.status==='excused'?text(body.reason,'سبب الاعتذار',500):'';
-  state.responses[k]={status:body.status,reason,updated_at:new Date().toISOString()};delete state.reminders[k];
+  savedReply={status:body.status,changes_used:changesUsed+(previous?1:0)};
+  state.responses[k]={...savedReply,reason,updated_at:new Date().toISOString()};delete state.reminders[k];
  }else fail(400,'عملية غير صالحة');
  const value=JSON.stringify(state);
  const result=stored?await q('UPDATE settings SET value=? WHERE key=? AND value=?',value,key,stored.value).run():await q('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)',key,value).run();
  if(Number(result.meta.changes)!==1)fail(409,'تغيّر الجدول أثناء التعديل. حدّث الصفحة وحاول مجددًا');
- return json({ok:true,...(startsOn?{starts_on:startsOn}:{})});
+ return json({ok:true,...(startsOn?{starts_on:startsOn}:{}),...(savedReply?{reply:savedReply}:{})});
 }

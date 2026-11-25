@@ -3,7 +3,7 @@ import {useEffect,useState} from 'react';
 import {CalendarCheck} from 'lucide-react';
 import {fetchWithDeadline} from '../lib/client-request';
 import {beirutDay,TIMEZONE} from '../lib/islamic-calendar';
-import {beirutStart,canExcuse,nextRecitationDay,type Slot} from '../lib/individual-recitation';
+import {beirutStart,canExcuse,nextRecitationDay,RECITATION_REPLY_CHANGES,type Slot} from '../lib/individual-recitation';
 import {useServiceAccess} from './service-access';
 
 type Row=Record<string,any>;
@@ -12,7 +12,8 @@ type Circle={id:string;name:string;schedule:string;teacher_name:string|null;day:
 type CircleEntry={circle_id:string;circle_name:string;day:string;status:string|null;lesson:Lesson|null};
 type RecitationSlot=Slot&{teacher_name:string};
 type Reply='confirmed'|'excused';
-type Recitations={slots:RecitationSlot[];responses:Record<string,{status:Reply}>;reminders:Record<string,unknown>;evaluations:Record<string,Row>};
+type AppointmentReply={status:Reply;changes_used?:number};
+type Recitations={slots:RecitationSlot[];responses:Record<string,AppointmentReply>;reminders:Record<string,unknown>;evaluations:Record<string,Row>};
 type CircleData={appointments:Circle[];history:CircleEntry[]};
 type Appointment={key:string;day:string;minute:number|null;circle?:Circle;slot?:RecitationSlot};
 const appointmentDate=new Intl.DateTimeFormat('ar-LB-u-ca-islamic-umalqura',{timeZone:TIMEZONE,weekday:'long',day:'numeric',month:'long'});
@@ -26,7 +27,9 @@ async function request<T>(url:string,options?:RequestInit):Promise<T>{
  return data;
 }
 function AppointmentDate({day}:{day:string}){
- return <p><time dateTime={day}>{appointmentDate.format(new Date(day+'T12:00:00Z'))}</time></p>;
+ const parts=appointmentDate.formatToParts(new Date(day+'T12:00:00Z'));
+ const part=(type:string)=>parts.find(item=>item.type===type)?.value;
+ return <p><time className="student-appointment-date" dateTime={day}><strong>{part('weekday')}</strong> <small>({part('day')} {part('month')})</small></time></p>;
 }
 function remainingTime(milliseconds:number){
  const minutes=Math.ceil(milliseconds/60000);
@@ -71,9 +74,9 @@ export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:st
   if(status==='excused'&&!reason)return;
   setBusy(true);setReplyError('');
   try{
-   await request('/api/individual-recitation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mosque_id:mosqueId,action:'respond',id:slot.id,day,status,reason})});
+   const result=await request<{reply?:AppointmentReply}>('/api/individual-recitation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mosque_id:mosqueId,action:'respond',id:slot.id,day,status,reason})});
    const key=slot.id+':'+day;
-   setRecitation(data=>data?{...data,responses:{...data.responses,[key]:{status}}}:data);
+   setRecitation(data=>data?{...data,responses:{...data.responses,[key]:result.reply??{status,changes_used:(data.responses[key]?.changes_used??0)+(data.responses[key]?1:0)}}}:data);
   }catch(e){setReplyError((e as Error).message)}finally{setBusy(false)}
  }
  if(home&&!circlesOn&&!recitationOn)return null;
@@ -85,14 +88,17 @@ export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:st
   {!pending&&!upcoming.length&&!errors.length&&<p>ما عندك مواعيد قادمة حاليًا.</p>}
   {upcoming.map(({key,day,minute,circle,slot},index)=>{
    const start=minute===null?null:beirutStart(day,minute),response=slot?recitationData?.responses[key]:undefined;
-   const canConfirm=slot&&!response&&start!==null&&now<start;
-   const canCancel=slot&&response?.status!=='excused'&&canExcuse(day,slot.minute,now);
-   return <article className="panel" key={key} style={{padding:16,marginTop:12,...(home&&index===0?{borderInlineStart:'4px solid var(--green)'}:{})}}>
+   const remainingChanges=Math.max(0,RECITATION_REPLY_CHANGES-(response?.changes_used??0));
+   const beforeDeadline=slot&&canExcuse(day,slot.minute,now);
+   const mayChange=Boolean(response&&remainingChanges>0&&beforeDeadline);
+   const canConfirm=slot&&(!response||mayChange&&response.status==='excused')&&start!==null&&now<start;
+   const canCancel=slot&&(!response||mayChange&&response.status==='confirmed')&&beforeDeadline;
+   return <article className={'panel student-appointment'+(home&&index===0?' student-appointment-next':'')} key={key}>
     {home&&index===0&&<span className="eyebrow"><CalendarCheck size={17} aria-hidden="true"/> أقرب موعد</span>}
     <h3>{circle?.name||'التسميع الفردي'}</h3>
     {circle?.lesson?.title&&<p><strong>{circle.lesson.title}</strong></p>}
     <AppointmentDate day={day}/>
-    <p>{start!==null?'الساعة '+clock.format(start).replace(/ ص$/,' صباحًا').replace(/ م$/,' مساءً'):circle?.schedule||'الساعة غير محدّدة'}{(slot?.teacher_name||circle?.teacher_name)&&' · مع '+(slot?.teacher_name||circle?.teacher_name)}</p>
+    <p>{start!==null?'الساعة '+clock.format(start).replace(/ ص$/,' صباحًا').replace(/ م$/,' مساءً'):circle?.schedule||'الساعة غير محدّدة'}{(slot?.teacher_name||circle?.teacher_name)&&' · مع الأستاذ '+(slot?.teacher_name||circle?.teacher_name)}</p>
     {start!==null&&start>now&&<p>المتبقّي {remainingTime(start-now)}</p>}
     {slot?.notes&&<p>{slot.notes}</p>}
     {slot&&!response&&Boolean(recitationData?.reminders[key])&&<p className="learning-notice">تنبيه من الإدارة لتأكيد الحضور أو الاعتذار.</p>}
@@ -101,7 +107,7 @@ export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:st
      {canConfirm&&<button type="button" className="btn primary" disabled={busy} onClick={()=>respond(slot,day,'confirmed')}>تأكيد الحضور</button>}
      {canCancel&&<button type="button" className="btn secondary" disabled={busy} onClick={()=>respond(slot,day,'excused')}>اعتذار عن الموعد</button>}
     </div>}
-    {slot&&response?.status!=='excused'&&start!==null&&now<start&&<small>يتوقّف تعديل الرد قبل الموعد بـ٣٠ دقيقة.</small>}
+    {slot&&start!==null&&now<start&&<p className="student-appointment-policy"><small>{response&&<>{remainingChanges===0?'استُخدمت فرص التعديل الثلاث.':'فرص التعديل المتبقية: '+remainingChanges.toLocaleString('ar-LB')+' من ٣.'} </>}يتوقّف تعديل الرد قبل الموعد بـ٣٠ دقيقة.</small></p>}
    </article>;
   })}
   {!home&&(circleData?.appointments||[]).filter(circle=>!circle.day).map(circle=><article className="panel" key={circle.id} style={{padding:16,marginTop:12}}><h3>{circle.name}</h3><p>المعلّم: {circle.teacher_name||'غير محدّد'}</p><p>{circle.schedule||'الموعد غير محدّد'}</p></article>)}
