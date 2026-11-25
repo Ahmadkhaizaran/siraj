@@ -9,7 +9,7 @@ import {useServiceAccess} from './service-access';
 type Row=Record<string,any>;
 type Lesson={title:string;content:string};
 type Circle={id:string;name:string;schedule:string;teacher_name:string|null;day:string|null;minute:number|null;lesson:Lesson|null};
-type CircleEntry={circle_id:string;circle_name:string;day:string;status:string|null;lesson:Lesson|null};
+type CircleEntry={circle_id:string;circle_name:string;day:string;status:string|null;lesson:Lesson|null;pdf_name?:string|null};
 type RecitationSlot=Slot&{teacher_name:string};
 type Reply='confirmed'|'excused';
 type AppointmentReply={status:Reply;changes_used?:number;reason?:string};
@@ -70,6 +70,18 @@ export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:st
   .sort((a,b)=>b.day.localeCompare(a.day));
  const pending=(circlesOn&&!circles&&!circleError)||(recitationOn&&!recitation&&!recitationError);
  const errors=[circlesOn?circleError:'',recitationOn?recitationError:''].filter(Boolean);
+ const [pdfBusy,setPdfBusy]=useState(false),[pdfError,setPdfError]=useState('');
+ async function downloadLesson(entry:CircleEntry){
+  setPdfBusy(true);setPdfError('');
+  try{
+   const query=new URLSearchParams({circle_id:entry.circle_id,date:entry.day});
+   const result=await request<{name:string;base64:string}>('/api/circle-lesson-pdf?'+query);
+   const bytes=Uint8Array.from(atob(result.base64),char=>char.charCodeAt(0));
+   const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+   const link=document.createElement('a');link.href=url;link.download=result.name;link.click();
+   window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }catch(e){setPdfError((e as Error).message)}finally{setPdfBusy(false)}
+ }
  const awaiting=upcoming.filter(({key,slot})=>slot&&!recitationData?.responses[key]).length;
  async function respond(slot:RecitationSlot,day:string,status:Reply,reason=''){
   const key=slot.id+':'+day;
@@ -148,12 +160,13 @@ export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:st
   </details>
   {!home&&(circleData?.appointments||[]).filter(circle=>!circle.day).map(circle=><article className="panel" key={circle.id} style={{padding:16,marginTop:12}}><h3>{circle.name}</h3><p>المعلّم: {circle.teacher_name||'غير محدّد'}</p><p>{circle.schedule||'الموعد غير محدّد'}</p></article>)}
   {!home&&<section aria-labelledby="student-appointment-history" style={{marginTop:24}}>
-   <h2 id="student-appointment-history">سجل اللقاءات والدروس</h2>
+   <h2 id="student-appointment-history">سجل اللقاءات والدروس</h2>{pdfError&&<p className="error" role="alert">{pdfError}</p>}
    {!pending&&!errors.length&&!circleData?.history.length&&!historyKeys.length&&<p>ما في لقاءات سابقة مسجّلة بعد.</p>}
    {circleData?.history.map(entry=><article className="panel" key={entry.circle_id+':'+entry.day} style={{padding:16,marginTop:12}}>
-    <h3>{entry.circle_name}</h3><AppointmentDate day={entry.day}/>
+    <h3>{entry.circle_name}</h3><AppointmentDate day={entry.day}/><small>{entry.day.split('-').reverse().join('-')}</small>
     {entry.lesson?.title&&<p><strong>{entry.lesson.title}</strong></p>}
     {entry.lesson?.content&&<p style={{whiteSpace:'pre-wrap'}}>{entry.lesson.content}</p>}
+    {entry.pdf_name&&<button type="button" className="btn secondary" disabled={pdfBusy} onClick={()=>void downloadLesson(entry)}>تنزيل {entry.pdf_name}</button>}
     {entry.status&&<p>الحضور: {attendance[entry.status]||entry.status}</p>}
    </article>)}
    {historyKeys.map(({key,day,slot})=>{

@@ -23,16 +23,24 @@ export async function circleSession(ctx:Row){
  const pdfKey=(day:string)=>'circle-lesson-pdf:'+cid+':'+day;
  const canReport=['primary','supervisor'].includes(user.role);
  if(path==='circle-weekly-report'){
+  if(!canReport)fail(403,'التقارير متاحة للمشرفين فقط');
+  const day=date(method==='GET'?params.get('date'):body.date),month=day.slice(0,7);
+  const monthlyKey='circle-monthly-summary:'+cid+':'+month;
+  if(method==='GET'){
+   const prefix='circle-weekly-report:'+cid+':';
+   const weeks=await rows('SELECT key,value FROM settings WHERE key>=? AND key<? ORDER BY key',prefix+weekOf(month+'-01'),prefix+addDays(month+'-01',32).slice(0,7)+'-01');
+   const summary=await one('SELECT value FROM settings WHERE key=?',monthlyKey);
+   return json({weeks:weeks.map(w=>({week:w.key.slice(-10),...JSON.parse(w.value)})),text:summary?JSON.parse(summary.value).report:'',version:summary?.value||''});
+  }
   if(method!=='POST')fail(405,'طريقة غير متاحة');
-  if(!canReport)fail(403,'حفظ التقرير الأسبوعي متاح للمشرفين فقط');
-  const day=date(body.date),report=text(body.report,'التقرير الأسبوعي',5000);
-  const key=reportKey(day);
+  const report=text(body.report,'التقرير',5000);
+  const key=body.monthly===true?monthlyKey:reportKey(day);
   const value=JSON.stringify({report,author:user.name,updated_at:new Date().toISOString()});
   const result=body.version
    ?await q('UPDATE settings SET value=? WHERE key=? AND value=?',value,key,body.version).run()
    :await q('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO NOTHING',key,value).run();
   if(result.meta.changes!==1)fail(409,'تغيّر التقرير. أعد تحميل الصفحة قبل الحفظ.');
-  return json({ok:true,version:value});
+  return json({ok:true,version:value,author:user.name});
  }
  if(path==='circle-lesson-pdf'){
   if(circle.kind!=='religion')fail(400,'إرفاق PDF متاح في حلقات الدروس الدينية');

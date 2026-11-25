@@ -18,6 +18,16 @@ async function request(path:string,body?:Row){
  const d:any=await r.json();if(!r.ok)throw Error(d.error||'تعذّر تحميل اللقاء');return d;
 }
 function CircleMaterials({mosque,circle,day,report,pdfName,canUpload}:{mosque:string;circle:string;day:string;report:{week:string;text:string;version:string}|null;pdfName:string|null;canUpload:boolean}){
+ const [month,setMonth]=useState(day.slice(0,7));
+ const [monthly,setMonthly]=useState<{weeks:{week:string;report:string;author:string}[];text:string;version:string}|null>(null);
+ const [monthError,setMonthError]=useState(''),[monthRevision,setMonthRevision]=useState(0);
+ useEffect(()=>{
+  if(!report||!month)return;
+  let live=true;setMonthly(null);setMonthError('');
+  const query=new URLSearchParams({mosque,circle_id:circle,date:month+'-01'});
+  request('circle-weekly-report?'+query).then(result=>{if(live)setMonthly(result)}).catch(e=>{if(live)setMonthError(e.message)});
+  return()=>{live=false};
+ },[mosque,circle,month,Boolean(report),monthRevision]);
  const [draft,setDraft]=useState(report?.text||''),[version,setVersion]=useState(report?.version||'');
  const [name,setName]=useState(pdfName),[file,setFile]=useState<File|null>(null);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
@@ -29,13 +39,28 @@ function CircleMaterials({mosque,circle,day,report,pdfName,canUpload}:{mosque:st
  return <>
   {report&&<form className="panel modal-form" style={{marginBottom:16}} onSubmit={e=>{e.preventDefault();void perform(async()=>{
    const result=await request('circle-weekly-report',{...target,report:draft,version});
-   setVersion(result.version);setNotice('تم حفظ التقرير الأسبوعي.');
+   setVersion(result.version);setMonthRevision(value=>value+1);setNotice('تم حفظ التقرير الأسبوعي.');
   })}}>
    <h2>تقرير المشرف الأسبوعي</h2>
    <p>أسبوع {report.week}</p>
    <label className="field"><span>تقييم الحلقة وملاحظات المشرف</span><textarea rows={4} required maxLength={5000} value={draft} disabled={busy} onChange={e=>setDraft(e.target.value)}/></label>
    <button className="btn primary" disabled={busy||!draft.trim()}>حفظ التقرير الأسبوعي</button>
   </form>}
+  {report&&<details className="panel modal-form" style={{marginBottom:16}}>
+   <summary>ملخّص التقييمات الشهري</summary>
+   <label className="field"><span>الشهر</span><input type="month" value={month} disabled={busy} onChange={e=>{if(e.target.value)setMonth(e.target.value)}}/></label>
+   {monthError&&<p className="error" role="alert">{monthError}</p>}
+   {monthly&&<>
+    {monthly.weeks.length?<ul>{monthly.weeks.map(entry=><li key={entry.week}><strong>{entry.week} · {entry.author}</strong><p style={{whiteSpace:'pre-wrap'}}>{entry.report}</p></li>)}</ul>:<p>ما في تقارير أسبوعية بهالشهر.</p>}
+    <form onSubmit={e=>{e.preventDefault();void perform(async()=>{
+     const result=await request('circle-weekly-report',{...target,date:month+'-01',report:monthly.text,version:monthly.version,monthly:true});
+     setMonthly({...monthly,version:result.version});setNotice('تم حفظ الملخّص الشهري.');
+    })}}>
+     <label className="field"><span>ملخّص الشهر ومتابعة الطلاب</span><textarea rows={4} maxLength={5000} required value={monthly.text} disabled={busy} onChange={e=>setMonthly({...monthly,text:e.target.value})}/></label>
+     <button className="btn primary" disabled={busy||!monthly.text.trim()}>حفظ الملخّص الشهري</button>
+    </form>
+   </>}
+  </details>}
   {(name||canUpload)&&<form className="panel modal-form" style={{marginBottom:16}} onSubmit={e=>{
    e.preventDefault();const input=e.currentTarget;
    if(!file)return;
