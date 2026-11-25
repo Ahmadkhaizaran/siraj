@@ -14,7 +14,7 @@ export default function ServiceControlPanel({mosques}:{mosques:{id:string;name:s
  useEffect(()=>{
   let live=true;setRoster(null);setRosterError('');
   if(scope==='all'&&mid)fetchWithDeadline('/api/institution-grades?mosque='+encodeURIComponent(mid),{cache:'no-store'})
-   .then(async response=>{const data=await response.json();if(!response.ok)throw Error(data.error);if(live)setRoster(data.students)})
+   .then(async response=>{const data=await response.json() as {students?:{id:string;name:string;status:string}[];error?:string};if(!response.ok||!data.students)throw Error(data.error||'تعذّر تحميل الطلاب');if(live)setRoster(data.students)})
    .catch(e=>{if(live)setRosterError(e.message)});
   return()=>{live=false};
  },[scope,mid]);
@@ -24,7 +24,7 @@ export default function ServiceControlPanel({mosques}:{mosques:{id:string;name:s
   setResetting(true);setError('');setNotice('');
   try{
    const response=await fetchWithDeadline('/api/institution-grades',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mosque_id:mosque.id,confirm:mosque.id})});
-   const data=await response.json();if(!response.ok)throw Error(data.error);
+   const data=await response.json() as {error?:string};if(!response.ok)throw Error(data.error||'تعذّر تصفير العلامات');
    setNotice('تم تصفير علامات الحلقات ونقاط الاجتهاد لطلاب '+mosque.name+'.');
   }catch(e){setError((e as Error).message)}finally{setResetting(false)}
  }
