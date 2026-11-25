@@ -1,5 +1,5 @@
-import {beirutDay} from './islamic-calendar';
-export type Slot={id:string;student_id:string;teacher_id:string;weekday:number;minute:number;duration?:number;notes?:string};
+import {addDays,beirutDay} from './islamic-calendar';
+export type Slot={id:string;student_id:string;teacher_id:string;weekday:number;minute:number;duration?:number;notes?:string;starts_on?:string};
 // Next free start for a teacher on a weekday: right after the teacher's last appointment, keeping that appointment's duration.
 export function suggestNext(slots:Slot[],teacher_id:string,weekday:number){
  const mine=slots.filter(s=>s.teacher_id===teacher_id&&s.weekday===weekday);if(!mine.length)return null;
@@ -17,6 +17,16 @@ export function beirutStart(day:string,minute:number){
  const fmt=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Beirut',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
  for(let i=0;i<3;i++){const p=Object.fromEntries(fmt.formatToParts(new Date(result)).map(p=>[p.type,p.value]));const rendered=Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:00Z`);result+=target-rendered;}
  return result;
+}
+export function nextRecitationDay(slot:Slot,now=Date.now()){
+ const today=beirutDay(new Date(now));
+ const from=slot.starts_on&&slot.starts_on>today?slot.starts_on:today;
+ const weekday=new Date(from+'T12:00:00Z').getUTCDay();
+ const day=addDays(from,(slot.weekday-weekday+7)%7);
+ return beirutStart(day,slot.minute)<=now?addDays(day,7):day;
+}
+function matchesRecitationDay(day:string,slot:Slot){
+ return /^\d{4}-\d{2}-\d{2}$/.test(day)&&Number.isFinite(Date.parse(day+'T12:00:00Z'))&&new Date(day+'T12:00:00Z').toISOString().slice(0,10)===day&&new Date(day+'T12:00:00Z').getUTCDay()===slot.weekday;
 }
 export function canExcuse(day:string,minute:number,now=Date.now()){return now<beirutStart(day,minute)-30*60000}
 export async function individualRecitation(ctx:any){
@@ -45,9 +55,10 @@ export async function individualRecitation(ctx:any){
  if(method==='GET'){
   if(user.role!=='teacher')return json({...state,students,teachers,today:beirutDay()});
   const slots=state.slots.filter((s:Slot)=>s.teacher_id===user.id),pick=(o:Record<string,any>)=>Object.fromEntries(Object.entries(o||{}).filter(([key])=>slots.some((s:Slot)=>key.startsWith(s.id+':'))));
-  return json({slots,responses:pick(state.responses),evaluations:pick(state.evaluations),reminders:pick(state.reminders),students:students.map((s:any)=>({id:s.id,name:s.name,student_number:s.student_number})),teachers,today:beirutDay()});
+  return json({slots,responses:Object.fromEntries(Object.entries(pick(state.responses)).map(([key,reply])=>[key,{status:reply.status,updated_at:reply.updated_at}])),evaluations:pick(state.evaluations),reminders:pick(state.reminders),students:students.map((s:any)=>({id:s.id,name:s.name,student_number:s.student_number})),teachers,today:beirutDay()});
  }
  if(method!=='POST')fail(405,'العملية غير متاحة');
+ let startsOn:string|undefined;
  if(body.action==='evaluate'){
   if(studentAccess)fail(403,'تقييم التسميع من صلاحيات المعلم أو الإدارة');
   const slot=state.slots.find((s:Slot)=>s.id===body.id);if(!slot)fail(404,'الموعد غير موجود');
@@ -65,6 +76,12 @@ export async function individualRecitation(ctx:any){
  }else if(body.action==='save'){
   if(studentAccess||user.role==='teacher')fail(403,'لا يمكنك تعديل المواعيد');
   const slot:Slot={id:body.id?text(body.id,'الموعد',80):crypto.randomUUID(),student_id:text(body.student_id,'الطالب',80),teacher_id:text(body.teacher_id,'المعلّم',80),weekday:Number(body.weekday),minute:Number(body.minute),duration:body.duration==null?30:Number(body.duration)};
+  const selectedDay=body.day===undefined?undefined:text(body.day,'تاريخ أول لقاء',10);
+  if(selectedDay&&!matchesRecitationDay(selectedDay,slot))fail(400,'التاريخ لا يطابق يوم الموعد');
+  const previous=state.slots.find((s:Slot)=>s.id===slot.id) as Slot|undefined;
+  if(!Number.isInteger(slot.weekday)||slot.weekday<0||slot.weekday>6||!Number.isInteger(slot.minute)||slot.minute<0||slot.minute>=1440)fail(400,'اختر وقتًا صالحًا');
+  startsOn=nextRecitationDay({...slot,starts_on:selectedDay});
+  slot.starts_on=previous&&previous.weekday===slot.weekday&&previous.minute===slot.minute&&(!selectedDay||selectedDay<beirutDay())?previous.starts_on:startsOn;
   const notes=text(body.notes||'','ملاحظات للطالب',500,false).trim();if(notes)slot.notes=notes;
   if(body.id&&!state.slots.some((s:Slot)=>s.id===slot.id))fail(404,'الموعد غير موجود');
   if(!students.some((s:any)=>s.id===slot.student_id)||!teachers.some((t:any)=>t.id===slot.teacher_id))fail(400,'اختر طالبًا ومعلّمًا من الجهة نفسها');
@@ -82,6 +99,7 @@ export async function individualRecitation(ctx:any){
   if(studentAccess||user.role==='teacher')fail(403,'إرسال التنبيه من صلاحيات المشرف');
   const slot=state.slots.find((s:Slot)=>s.id===body.id);if(!slot)fail(404,'الموعد غير موجود');
   const day=text(body.day,'التاريخ',10);if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(Date.parse(day+'T12:00:00Z'))||new Date(day+'T12:00:00Z').toISOString().slice(0,10)!==day||new Date(day+'T12:00:00Z').getUTCDay()!==slot.weekday)fail(400,'التاريخ لا يطابق يوم الموعد');
+  if(slot.starts_on&&day<slot.starts_on)fail(400,'هذا التاريخ يسبق أول لقاء');
   const k=slot.id+':'+day;if(state.responses[k])fail(409,'ردّ الطالب على هذا اللقاء، لا حاجة للتنبيه');
   if(Date.now()>=beirutStart(day,slot.minute))fail(409,'بدأ اللقاء أو انتهى؛ لا يمكن إرسال تنبيه');
   state.reminders[k]={at:new Date().toISOString(),by:user.id,count:(state.reminders[k]?.count||0)+1};
@@ -89,9 +107,11 @@ export async function individualRecitation(ctx:any){
   if(!studentAccess)fail(403,'تأكيد الحضور أو الاعتذار من حساب الطالب فقط');
   const slot=state.slots.find((s:Slot)=>s.id===body.id);if(!slot)fail(404,'الموعد غير موجود');
   const day=text(body.day,'التاريخ',10);if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(Date.parse(day+'T12:00:00Z'))||new Date(day+'T12:00:00Z').toISOString().slice(0,10)!==day||new Date(day+'T12:00:00Z').getUTCDay()!==slot.weekday)fail(400,'التاريخ لا يطابق يوم الموعد');
+  if(slot.starts_on&&day<slot.starts_on)fail(400,'هذا التاريخ يسبق أول لقاء');
   const k=slot.id+':'+day;if(state.responses[k]?.status==='excused')fail(409,'تم الاعتذار عن هذا اللقاء ولا يمكن تغيير الرد');
   if(Date.now()>=beirutStart(day,slot.minute))fail(409,'بدأ اللقاء؛ تواصل مع المعلّم');
   if(!['confirmed','excused'].includes(body.status))fail(400,'اختر تأكيد الحضور أو الاعتذار');
+  if(state.responses[k]&&!canExcuse(day,slot.minute))fail(409,'يتوقف تعديل الرد قبل الموعد بثلاثين دقيقة');
   if(body.status==='excused'&&!canExcuse(day,slot.minute))fail(409,'انتهت مهلة الاعتذار قبل اللقاء بنصف ساعة. تواصل مع المعلّم على رقمه.');
   const reason=body.status==='excused'?text(body.reason,'سبب الاعتذار',500):'';
   state.responses[k]={status:body.status,reason,updated_at:new Date().toISOString()};delete state.reminders[k];
@@ -99,5 +119,5 @@ export async function individualRecitation(ctx:any){
  const value=JSON.stringify(state);
  const result=stored?await q('UPDATE settings SET value=? WHERE key=? AND value=?',value,key,stored.value).run():await q('INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)',key,value).run();
  if(Number(result.meta.changes)!==1)fail(409,'تغيّر الجدول أثناء التعديل. حدّث الصفحة وحاول مجددًا');
- return json({ok:true});
+ return json({ok:true,...(startsOn?{starts_on:startsOn}:{})});
 }

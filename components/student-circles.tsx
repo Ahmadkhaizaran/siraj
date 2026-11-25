@@ -2,8 +2,8 @@
 import {useEffect,useState} from 'react';
 import {CalendarCheck} from 'lucide-react';
 import {fetchWithDeadline} from '../lib/client-request';
-import {addDays,beirutDay,hijriLabel,TIMEZONE} from '../lib/islamic-calendar';
-import {beirutStart,canExcuse,type Slot} from '../lib/individual-recitation';
+import {beirutDay,TIMEZONE} from '../lib/islamic-calendar';
+import {beirutStart,canExcuse,nextRecitationDay,type Slot} from '../lib/individual-recitation';
 import {useServiceAccess} from './service-access';
 
 type Row=Record<string,any>;
@@ -15,8 +15,8 @@ type Reply='confirmed'|'excused';
 type Recitations={slots:RecitationSlot[];responses:Record<string,{status:Reply}>;reminders:Record<string,unknown>;evaluations:Record<string,Row>};
 type CircleData={appointments:Circle[];history:CircleEntry[]};
 type Appointment={key:string;day:string;minute:number|null;circle?:Circle;slot?:RecitationSlot};
-const gregorian=new Intl.DateTimeFormat('ar-LB-u-ca-gregory',{timeZone:TIMEZONE,weekday:'long',day:'numeric',month:'long',year:'numeric'});
-const clock=new Intl.DateTimeFormat('ar-LB',{timeZone:TIMEZONE,hour:'numeric',minute:'2-digit'});
+const appointmentDate=new Intl.DateTimeFormat('ar-LB-u-ca-islamic-umalqura',{timeZone:TIMEZONE,weekday:'long',day:'numeric',month:'long'});
+const clock=new Intl.DateTimeFormat('ar-LB',{timeZone:TIMEZONE,hour:'numeric',minute:'2-digit',hour12:true});
 const attendance:Record<string,string>={present:'حاضر',late:'متأخر',absent:'غائب',excused:'بعذر'};
 const replyLabel:Record<Reply,string>={confirmed:'تم تأكيد الحضور',excused:'تم تسجيل الاعتذار'};
 async function request<T>(url:string,options?:RequestInit):Promise<T>{
@@ -26,7 +26,12 @@ async function request<T>(url:string,options?:RequestInit):Promise<T>{
  return data;
 }
 function AppointmentDate({day}:{day:string}){
- return <p><time dateTime={day}>{gregorian.format(new Date(day+'T12:00:00Z'))}</time> · {hijriLabel(day)}</p>;
+ return <p><time dateTime={day}>{appointmentDate.format(new Date(day+'T12:00:00Z'))}</time></p>;
+}
+function remainingTime(milliseconds:number){
+ const minutes=Math.ceil(milliseconds/60000);
+ const [value,unit]=minutes>=2880?[Math.floor(minutes/1440),'day']:minutes>=60?[Math.ceil(minutes/60),'hour']:[minutes,'minute'];
+ return new Intl.NumberFormat('ar-LB',{style:'unit',unit:String(unit),unitDisplay:'long'}).format(Number(value));
 }
 export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:string;home?:boolean;onOpen:()=>void}){
  const allowed=useServiceAccess(),circlesOn=allowed('circles'),recitationOn=allowed('individual');
@@ -51,9 +56,7 @@ export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:st
  const circleData=circlesOn?circles:null,recitationData=recitationOn?recitation:null;
  const upcoming:Appointment[]=(circleData?.appointments||[]).flatMap(circle=>circle.day?[{key:'circle:'+circle.id,day:circle.day,minute:circle.minute,circle}]:[]);
  for(const slot of recitationData?.slots||[]){
-  const weekday=new Date(today+'T12:00:00Z').getUTCDay();
-  let day=addDays(today,(slot.weekday-weekday+7)%7);
-  if(beirutStart(day,slot.minute)+(slot.duration??30)*60000<=now)day=addDays(day,7);
+  const day=nextRecitationDay(slot,now);
   upcoming.push({key:slot.id+':'+day,day,minute:slot.minute,slot});
  }
  upcoming.sort((a,b)=>a.day.localeCompare(b.day)||(a.minute??1440)-(b.minute??1440));
@@ -81,21 +84,24 @@ export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:st
   {pending&&<p role="status">جارٍ تحميل المواعيد…</p>}
   {!pending&&!upcoming.length&&!errors.length&&<p>ما عندك مواعيد قادمة حاليًا.</p>}
   {upcoming.map(({key,day,minute,circle,slot},index)=>{
-   const start=minute===null?null:beirutStart(day,minute),response=recitationData?.responses[key];
+   const start=minute===null?null:beirutStart(day,minute),response=slot?recitationData?.responses[key]:undefined;
+   const canConfirm=slot&&!response&&start!==null&&now<start;
+   const canCancel=slot&&response?.status!=='excused'&&canExcuse(day,slot.minute,now);
    return <article className="panel" key={key} style={{padding:16,marginTop:12,...(home&&index===0?{borderInlineStart:'4px solid var(--green)'}:{})}}>
     {home&&index===0&&<span className="eyebrow"><CalendarCheck size={17} aria-hidden="true"/> أقرب موعد</span>}
     <h3>{circle?.name||'التسميع الفردي'}</h3>
     {circle?.lesson?.title&&<p><strong>{circle.lesson.title}</strong></p>}
     <AppointmentDate day={day}/>
-    <p>{start!==null?clock.format(start):circle?.schedule||'الساعة غير محدّدة'}</p>
-    <p>المعلّم: {slot?.teacher_name||circle?.teacher_name||'غير محدّد'}{slot&&' · '+(slot.duration??30)+' دقيقة'}</p>
+    <p>{start!==null?'الساعة '+clock.format(start).replace(/ ص$/,' صباحًا').replace(/ م$/,' مساءً'):circle?.schedule||'الساعة غير محدّدة'}{(slot?.teacher_name||circle?.teacher_name)&&' · مع '+(slot?.teacher_name||circle?.teacher_name)}</p>
+    {start!==null&&start>now&&<p>المتبقّي {remainingTime(start-now)}</p>}
     {slot?.notes&&<p>{slot.notes}</p>}
     {slot&&!response&&Boolean(recitationData?.reminders[key])&&<p className="learning-notice">تنبيه من الإدارة لتأكيد الحضور أو الاعتذار.</p>}
-    {slot&&<p role="status">{response?replyLabel[response.status]:start!==null&&now>=start?'الموعد جارٍ':'بانتظار تأكيد الحضور'}</p>}
-    {slot&&!response&&start!==null&&now<start&&<div className="staff-account-actions">
-     <button type="button" className="btn primary" disabled={busy} onClick={()=>respond(slot,day,'confirmed')}>تأكيد الحضور</button>
-     {canExcuse(day,slot.minute,now)&&<button type="button" className="btn secondary" disabled={busy} onClick={()=>respond(slot,day,'excused')}>اعتذار عن الموعد</button>}
+    {slot&&<p role="status">{response?replyLabel[response.status]:start!==null&&now>=start?'الموعد جارٍ':'موعد قريب بانتظار ردّك'}</p>}
+    {slot&&(canConfirm||canCancel)&&<div className="staff-account-actions">
+     {canConfirm&&<button type="button" className="btn primary" disabled={busy} onClick={()=>respond(slot,day,'confirmed')}>تأكيد الحضور</button>}
+     {canCancel&&<button type="button" className="btn secondary" disabled={busy} onClick={()=>respond(slot,day,'excused')}>اعتذار عن الموعد</button>}
     </div>}
+    {slot&&response?.status!=='excused'&&start!==null&&now<start&&<small>يتوقّف تعديل الرد قبل الموعد بـ٣٠ دقيقة.</small>}
    </article>;
   })}
   {!home&&(circleData?.appointments||[]).filter(circle=>!circle.day).map(circle=><article className="panel" key={circle.id} style={{padding:16,marginTop:12}}><h3>{circle.name}</h3><p>المعلّم: {circle.teacher_name||'غير محدّد'}</p><p>{circle.schedule||'الموعد غير محدّد'}</p></article>)}
