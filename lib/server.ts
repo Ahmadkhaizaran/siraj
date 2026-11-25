@@ -276,7 +276,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    const mosque=await one('SELECT * FROM mosques WHERE id=?',mid);
    const team=await rows("SELECT id,name,english_name,username,role,phone,active,created_at FROM users WHERE mosque_id=? AND cancelled_at IS NULL AND role!='student' ORDER BY created_at",mid);
    const last=await one('SELECT MAX(created_at) AS at FROM activity WHERE mosque_id=?',mid);
-   return json({mosque,team,last_activity_at:last?.at||null,checks:{primary_assigned:team.some(t=>t.role==='primary'&&t.active),active_team:team.filter(t=>t.active).length,contact_available:team.some(t=>t.role==='primary'&&t.active&&t.phone)}});
+   return json({mosque,team,grade_reset_available:true,last_activity_at:last?.at||null,checks:{primary_assigned:team.some(t=>t.role==='primary'&&t.active),active_team:team.filter(t=>t.active).length,contact_available:team.some(t=>t.role==='primary'&&t.active&&t.phone)}});
   }
   if(path==='support'||path==='support/messages'||path==='support/seen'){
    if(!['admin','platform_supervisor','primary','supervisor'].includes(user.role))fail(403,'التواصل الإداري متاح لإدارة الجهة وإدارة المنصّة');
