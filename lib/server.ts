@@ -254,7 +254,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    return json({ok:true});
   }
   if(path==='institution-grades'){
-   if(!isOwner)fail(403,'إدارة علامات الجهة متاحة لصاحب المنصة فقط');
+   if(!isAdmin)fail(403,'إدارة علامات الجهة متاحة لإدارة المنصّة فقط');
    if(method!=='GET'&&method!=='POST')fail(405,'طريقة غير متاحة');
    const mid=scope(method==='GET'?params.get('mosque'):body.mosque_id);
    const mosque=await one('SELECT name FROM mosques WHERE id=? AND cancelled_at IS NULL',mid);
@@ -265,7 +265,8 @@ export async function handle(req:Request,runtime?:SirajRuntime){
     q('UPDATE circle_sessions SET revision=revision+1 WHERE circle_id IN (SELECT id FROM circles WHERE mosque_id=?)',mid),
     q('UPDATE circle_records SET attendance=0,quran=0,religion=0,conduct=0,activity=0,tajweed=CASE WHEN tajweed IS NULL THEN NULL ELSE 0 END,points=0 WHERE session_id IN (SELECT cs.id FROM circle_sessions cs JOIN circles c ON c.id=cs.circle_id WHERE c.mosque_id=?) AND student_id IN (SELECT id FROM students WHERE mosque_id=?)',mid,mid),
     q('DELETE FROM motivational_scores WHERE student_id IN (SELECT id FROM students WHERE mosque_id=?)',mid),
-    audit(mid,'صُفّرت علامات الحلقات ونقاط الاجتهاد لطلاب '+mosque!.name),
+    q('DELETE FROM platform_achievements WHERE student_id IN (SELECT id FROM students WHERE mosque_id=?)',mid),
+    audit(mid,'صُفّرت علامات الحلقات ونقاط الاجتهاد وأُعيدت الإنجازات لطلاب '+mosque!.name),
    ]);
    return json({ok:true});
   }
