@@ -2,7 +2,7 @@
 import {fetchWithDeadline} from '../lib/client-request';
 import {ServiceProvider,ServiceBoundary,usePageAccess,useServiceSnapshot} from '../components/service-access';
 import { useState,useEffect,useMemo,useRef,type FormEvent,type ReactNode } from 'react';
-import { LayoutDashboard,Users,BookOpen,UserRoundCog,ClipboardCheck,TrendingUp,Settings,Landmark,Plus,Search,Bell,ChevronDown,ArrowUpLeft,ArrowLeft,LogOut,Menu,X,Check,CheckCheck,Clock,CalendarDays,Download,ShieldCheck,Sparkles,Eye,EyeOff,LoaderCircle,MoreHorizontal,GraduationCap,Upload,KeyRound,Leaf,ArrowRight,CircleHelp,CheckCircle2,Copy,Trash2,Info,Trophy } from 'lucide-react';
+import { LayoutDashboard,Users,BookOpen,UserRoundCog,ClipboardCheck,TrendingUp,Settings,Landmark,Plus,Search,Bell,ChevronDown,ArrowUpLeft,ArrowLeft,LogOut,Menu,X,Check,CheckCheck,Clock,CalendarDays,Download,ShieldCheck,Sparkles,Eye,EyeOff,LoaderCircle,MoreHorizontal,GraduationCap,Upload,KeyRound,ArrowRight,CircleHelp,CheckCircle2,Copy,Trash2,Info,Trophy } from 'lucide-react';
 import PlatformNotice from '../components/platform-notice';
 import RanksBoard from '../components/ranks-board';
 import CircleWorkspace from '../components/circle-workspace';
@@ -84,7 +84,38 @@ function PageContent(){
  async function saveSettings(e:FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);const fd=new FormData(e.currentTarget);try{await api('mosques',{id:mid,name:fd.get('name'),kind:fd.get('kind'),city:fd.get('city'),logo:form.logo===undefined?mosque?.logo:form.logo},'PATCH');await load();tell('تم حفظ إعدادات الجهة')}catch(e){tell((e as Error).message)}finally{setBusy(false)}}
  function uploadLogo(file?:File){if(!file)return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)){tell('اختر صورة PNG أو JPG أو WebP');return}if(file.size>8*1024*1024){tell('حجم الصورة الأقصى 8 ميغابايت');return}const reader=new FileReader();reader.onload=()=>{const image=new Image();image.onload=()=>{const canvas=document.createElement('canvas');const scale=Math.min(1,360/Math.max(image.width,image.height));canvas.width=image.width*scale;canvas.height=image.height*scale;canvas.getContext('2d')!.drawImage(image,0,0,canvas.width,canvas.height);update('logo',canvas.toDataURL('image/png'));tell('تم تجهيز الشعار. اضغط حفظ الإعدادات.')};image.src=String(reader.result)};reader.readAsDataURL(file)}
  if(mode==='loading')return <main id="siraj-main" tabIndex={-1} className="loading"><Brand/><LoaderCircle className="spin"/><p>نضيء المساحة لتبدأ رحلتك...</p></main>;
- if(mode==='login'||mode==='setup')return <main id="siraj-main" tabIndex={-1} className="auth-page"><section className="auth-story"><Brand/><div className="auth-story-copy"><span className="eyebrow light">علمٌ يُرعى، وأثرٌ يبقى</span><h1>لكلّ طالبٍ رحلة.<br/>ولكلّ رحلةٍ <em>سِراج.</em></h1><p>مساحتك لإدارة الحلقات، ومساندة المدرّسين،<br/>ورعاية تقدّم الطلاب. كلّها في مكان واحد.</p><div className="auth-illustration" aria-hidden="true"><div className="arch arch-one"/><div className="arch arch-two"/><div className="arch arch-three"/><div className="illustration-book"><BookOpen size={94} strokeWidth={1}/></div><span className="star s1"><Sparkles size={24} aria-hidden="true"/></span><span className="star s2"><Sparkles size={40} aria-hidden="true"/></span><span className="star s3"><Sparkles size={13} aria-hidden="true"/></span></div></div><footer><span>نبدأ، ونكبر مع كل مسجد ومركز <Leaf size={15}/></span></footer></section><section className="auth-main"><div className="auth-top"><span>منصّة سِراج التعليمية</span><ThemeSwitcher/><span className="version">النسخة الأولى <span className="dot"/></span></div><div className="auth-card"><div className="auth-welcome-icon">{mode==='setup'?<KeyRound size={26}/>:<Landmark size={28}/>}</div><span className="eyebrow">{mode==='setup'?'الخطوة الأولى':'أهلًا بعودتك'}</span><h2>{mode==='setup'?'لنُضئ سِراج معًا':'مساحة الرعاية والتعلّم'}</h2><p>{mode==='setup'?'أنشئ حساب مدير المنصّة لبدء إدارة المساجد والمراكز.':'سجّل دخولك لمتابعة حلقاتك وطلابك.'}</p><HadithCard compact/><form onSubmit={login}>{mode==='setup'&&<Field label="اسم مدير المنصّة"><input name="name" defaultValue="أحمد خيزران" required autoComplete="name" maxLength={150}/></Field>}<Field label="اسم المستخدم" hint={mode==='setup'?'حروف إنكليزية وأرقام، 3 محارف على الأقل':undefined}><input name="username" dir="ltr" autoComplete="username" placeholder={mode==='setup'?'ahmad':'أدخل اسم المستخدم'} minLength={3} maxLength={40} pattern="[A-Za-z0-9_.\-]{3,40}" required/></Field><Field label="كلمة السر" hint={mode==='setup'?'اختر كلمة سر من 12 محرفًا على الأقل':undefined}><div className="password-field"><input name="password" type={showPassword?'text':'password'} dir="ltr" required minLength={mode==='setup'?12:1} maxLength={128} placeholder="••••••••••••" autoComplete={mode==='setup'?'new-password':'current-password'}/><button type="button" className="icon-btn" aria-label={showPassword?'إخفاء كلمة السر':'إظهار كلمة السر'} onClick={()=>setShowPassword(!showPassword)}>{showPassword?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></Field>{error&&<p className="error" role="alert">{error}</p>}<button className="btn primary full" disabled={busy}>{busy?<LoaderCircle className="spin" size={18}/>:<>{mode==='setup'?'إنشاء حسابي وبدء الرحلة':'تسجيل الدخول'}<ArrowLeft size={18}/></>}</button></form><p className="auth-help"><ShieldCheck size={15}/>{mode==='setup'?'رابط إعداد خاص يُستخدم مرة واحدة فقط.':'الحسابات ينشئها مدير المنصّة أو المشرف الأساسي.'}</p></div><footer className="auth-footer"><span>خطوات صغيرة، أثر كبير. · <a href="/about">من نحن</a></span><span>سِراج © {new Date().getFullYear()}</span></footer></section></main>;
+ if(mode==='login'||mode==='setup'){
+  const isSetup=mode==='setup';
+  return (
+   <main id="siraj-main" tabIndex={-1} className="auth-page" style={{gridTemplateColumns:'minmax(0, 1fr)',padding:'24px'}}>
+    <section className="auth-card" aria-labelledby="siraj-sign-in" style={{width:'min(100%, 400px)'}}>
+     <header style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:16}}>
+      <div className="brand">
+       <div className="brand-mark"><img src="/favicon.svg" alt=""/></div>
+       <strong>سراج</strong>
+      </div>
+      <ThemeSwitcher/>
+     </header>
+     <p style={{marginTop:12,color:'inherit'}}>لكلّ طالبٍ رحلة، ولكلّ رحلةٍ سراج.</p>
+     <h1 id="siraj-sign-in">{isSetup?'لنُضئ سِراج معًا':'تسجيل الدخول'}</h1>
+     <p style={{marginTop:4,color:'inherit'}}>{isSetup?'أنشئ حساب مدير المنصّة لبدء إدارة المساجد والمراكز.':'سجّل دخولك للمتابعة.'}</p>
+     <form onSubmit={login}>
+      {isSetup&&<Field label="اسم مدير المنصّة"><input name="name" defaultValue="أحمد خيزران" required autoComplete="name" maxLength={150}/></Field>}
+      <Field label="اسم المستخدم" hint={isSetup?'حروف إنكليزية وأرقام، 3 محارف على الأقل':undefined}><input name="username" dir="ltr" autoComplete="username" placeholder={isSetup?'ahmad':'أدخل اسم المستخدم'} minLength={3} maxLength={40} pattern="[A-Za-z0-9_.\-]{3,40}" required/></Field>
+      <Field label="كلمة السر" hint={isSetup?'اختر كلمة سر من 12 محرفًا على الأقل':undefined}>
+       <div className="password-field">
+        <input name="password" type={showPassword?'text':'password'} dir="ltr" required minLength={isSetup?12:1} maxLength={128} placeholder="••••••••••••" autoComplete={isSetup?'new-password':'current-password'}/>
+        <button type="button" className="icon-btn" aria-label={showPassword?'إخفاء كلمة السر':'إظهار كلمة السر'} onClick={()=>setShowPassword(!showPassword)}>{showPassword?<EyeOff size={18}/>:<Eye size={18}/>}</button>
+       </div>
+      </Field>
+      {error&&<p className="error" role="alert">{error}</p>}
+      <button type="submit" className="btn primary full" disabled={busy} aria-busy={busy}>{busy?<><LoaderCircle className="spin" size={18} aria-hidden="true"/>{isSetup?'جارٍ إنشاء الحساب…':'جارٍ تسجيل الدخول…'}</>:<>{isSetup?'إنشاء حسابي وبدء الرحلة':'تسجيل الدخول'}<ArrowLeft size={18}/></>}</button>
+     </form>
+     {isSetup&&<p className="auth-help"><ShieldCheck size={15}/>رابط إعداد خاص يُستخدم مرة واحدة فقط.</p>}
+    </section>
+   </main>
+  );
+ }
  if(!data)return <main id="siraj-main" tabIndex={-1} className="loading"><LoaderCircle className="spin"/><p>{error||'جارٍ تحميل مساحتك...'}</p><button className="btn" onClick={()=>load()}>إعادة المحاولة</button><button className="text-button" onClick={logout}>العودة للدخول</button></main>;
  if(admin)return <PlatformHome data={data} reload={()=>load('')} onLogout={logout}/>;
  if(user?.role==='student')return <StudentHome data={data} onLogout={logout}/>;
