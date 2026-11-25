@@ -20,7 +20,7 @@ export default function ServiceControlPanel({mosques}:{mosques:{id:string;name:s
  },[scope,mid]);
  async function resetGrades(){
   if(!mosque||resetting)return;
-  if(!await confirmation.ask('تصفير علامات الحلقات ونقاط الاجتهاد لجميع طلاب '+mosque.name+'؟ لا يمكن التراجع عن هذه العملية.'))return;
+  if(!await confirmation.ask('هل أنت متأكد من تصفير علامات الحلقات ونقاط الاجتهاد لجميع طلاب '+mosque.name+'؟ لا يمكن التراجع عن هذه العملية.',{cancel:'إلغاء',confirm:'متابعة التصفير'}))return;
   setResetting(true);setError('');setNotice('');
   try{
    const response=await fetchWithDeadline('/api/institution-grades',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mosque_id:mosque.id,confirm:mosque.id})});

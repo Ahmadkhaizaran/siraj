@@ -35,7 +35,7 @@ export default function PlatformHome({data,reload,onLogout}:{data:Row;reload:()=
  async function resetInstitutionGrades(){
   if(!m||busy||!health?.grade_reset_available)return;
   const {id,name}=m;
-  if(!await confirmation.ask('تصفير علامات طلاب '+name+' وإعادة سباق الاجتهاد وشجرة الإنجازات إلى البداية؟ لا يمكن التراجع عن التصفير.'))return;
+  if(!await confirmation.ask('هل أنت متأكد من تصفير علامات طلاب '+name+' وإعادة سباق الاجتهاد وشجرة الإنجازات إلى البداية؟ لا يمكن التراجع عن التصفير.',{cancel:'إلغاء',confirm:'متابعة التصفير'}))return;
   setBusy(true);setError('');setNotice('');
   try{
    await api('institution-grades',{mosque_id:id,confirm:id});
