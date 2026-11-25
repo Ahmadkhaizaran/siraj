@@ -69,7 +69,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    await q('INSERT INTO auth_attempts (key,count,expires_at) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN auth_attempts.expires_at<? THEN 1 ELSE auth_attempts.count+1 END, expires_at=CASE WHEN auth_attempts.expires_at<? THEN ? ELSE auth_attempts.expires_at END',key,expires,timestamp,timestamp,expires).run();
    const a=await one('SELECT count FROM auth_attempts WHERE key=?',key);if(Number(a?.count)>max)fail(429,'محاولات كثيرة. حاول مجددًا بعد 15 دقيقة.');
   };
-  const newSession=async(userId:string)=>{const account=await one('SELECT role FROM users WHERE id=?',userId);issuedSessionAge=account?.role==='student'?SESSION_SECONDS:2592000;const t=token();await q('INSERT INTO sessions (token_hash,user_id,expires_at) VALUES (?,?,?)',await digest(t),userId,Date.now()+issuedSessionAge*1000).run();return t;};
+  const newSession=async(userId:string,loginMosque?:string)=>{const account=await one('SELECT role FROM users WHERE id=?',userId);issuedSessionAge=account?.role==='student'?SESSION_SECONDS:2592000;const t=token();const session=q('INSERT INTO sessions (token_hash,user_id,expires_at) VALUES (?,?,?)',await digest(t),userId,Date.now()+issuedSessionAge*1000);if(loginMosque)await db.batch([session,q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',id(),loginMosque,userId,'auth:successful-login',now())]);else await session.run();return t;};
   const current=async()=>{
    const t=cookieToken(req);if(!t)return null;const hash=await digest(t);
    const u=await one('SELECT u.*,n.number AS student_number,s.expires_at AS session_expires FROM users u JOIN sessions s ON s.user_id=u.id LEFT JOIN student_codes n ON n.student_id=u.student_id WHERE s.token_hash=? AND s.expires_at>? AND u.active=1 AND u.cancelled_at IS NULL AND (u.mosque_id IS NULL OR EXISTS (SELECT 1 FROM mosques m WHERE m.id=u.mosque_id AND m.cancelled_at IS NULL))',hash,Date.now());
@@ -127,7 +127,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    }
    if(!u||!valid||!u.active||u.cancelled_at||(u.mosque_id&&!await one('SELECT id FROM mosques WHERE id=? AND cancelled_at IS NULL',u.mosque_id)))fail(401,'اسم المستخدم أو كلمة السر غير صحيح');
    await q('DELETE FROM auth_attempts WHERE key=?','account:'+await digest(login)).run();
-   const t=await newSession(u.id);return json({ok:true},200,{'Set-Cookie':sessionCookie(req,t,issuedSessionAge)});
+   const t=await newSession(u.id,u.mosque_id||undefined);return json({ok:true},200,{'Set-Cookie':sessionCookie(req,t,issuedSessionAge)});
   }
   if(path==='auth/logout'&&method==='POST'){const t=cookieToken(req);if(t)await q('DELETE FROM sessions WHERE token_hash=?',await digest(t)).run();return json({ok:true},200,{'Set-Cookie':sessionCookie(req,'',0)});}
   const u=await current();if(!u)fail(401,'يرجى تسجيل الدخول');
@@ -177,7 +177,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
   const audit=(mid:string|null,message:string)=>q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',id(),mid,user.id,message,now());
   const params=new URL(req.url).searchParams;
   if(path==='student-certificates')return await studentCertificates({user,method,body,params,scope,studentAccess,mosqueExists,rows,one,q,fail,json,audit});
-  if(path==='supervision-report')return await supervisionReport({user,params,method,scope,mosqueExists,rows,fail,json});
+  if(path==='supervision-report')return await supervisionReport({user,params,method,scope,mosqueExists,rows,one,date,beirutDay,services,fail,json});
   if(path==='individual-recitation')return await individualRecitation({db,user,body,params,method,fail,json,mosqueExists,text});
   if(path==='student-credentials'&&['GET','POST'].includes(method)){
    if(!isOwner)fail(403,'حسابات طلاب جميع الجهات من صلاحيات صاحب المنصّة فقط');
