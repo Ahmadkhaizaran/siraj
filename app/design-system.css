@@ -80,3 +80,83 @@ html{min-height:100%;height:auto;overflow-y:scroll;scrollbar-gutter:stable}body{
  :is(.sidebar nav button,.student-bottom-nav button,.platform-section-tabs button):not(:disabled):hover{box-shadow:inset 0 0 0 1px var(--focus)}
  .btn.secondary:not(:disabled):hover{background:color-mix(in srgb,var(--white),var(--focus) 9%);border-color:var(--focus)}
 }
+
+.student-appointments-panel{
+ --appointment-accent:#174e42;
+ --appointment-light:#edf6ef;
+ overflow:hidden;
+ border:1px solid var(--appointment-accent);
+ border-radius:22px;
+}
+html[data-theme="dark"] .student-appointments-panel{
+ --appointment-accent:#a5ddbf;
+ --appointment-light:#20382e;
+}
+.student-appointments-heading{
+ display:flex;
+ flex-wrap:wrap;
+ align-items:center;
+ gap:8px 12px;
+ padding:clamp(14px,3vw,24px);
+ cursor:pointer;
+ list-style:none;
+ color:var(--appointment-accent);
+}
+.student-appointments-heading::-webkit-details-marker{display:none}
+.student-appointments-heading h2{color:var(--ink)}
+.student-appointments-near,.student-appointment-remaining{font-weight:700;color:var(--appointment-accent)}
+.student-appointments-count{
+ border-radius:999px;
+ padding:2px 10px;
+ background:var(--green);
+ color:#fff;
+ font-size:12px;
+ font-weight:700;
+}
+.student-appointments-chevron{margin-inline-start:auto}
+.student-appointments-panel[open] .student-appointments-chevron{transform:rotate(180deg)}
+.student-appointments-body{padding:0 clamp(14px,3vw,24px) clamp(14px,3vw,24px)}
+.student-appointments-body .student-appointment{
+ margin:0;
+ padding:clamp(14px,3vw,22px) 0;
+ border:0;
+ border-block-start:1px solid var(--line);
+ border-radius:0;
+ background:transparent;
+ box-shadow:none;
+}
+.student-appointment-top{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px 12px}
+.student-appointment-status{
+ display:inline-flex;
+ align-items:center;
+ align-self:flex-start;
+ gap:6px;
+ padding:4px 10px;
+ border-radius:999px;
+ background:var(--appointment-light);
+ color:var(--appointment-accent);
+ font-size:12px;
+ font-weight:700;
+}
+.student-appointment-status.waiting{background:#fbf3d7;color:#724e12}
+html[data-theme="dark"] .student-appointment-status.waiting{background:#493b21;color:#f2daa0}
+.student-appointment-status.excused{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.student-appointment-meta{color:var(--muted);overflow-wrap:anywhere}
+.student-appointment-meta svg{vertical-align:middle;margin-inline-end:6px}
+.student-appointment-actions{display:flex;flex-wrap:wrap;gap:10px;margin-block-start:12px}
+.student-appointment-actions .btn{flex:0 1 auto}
+.student-appointment-actions .btn.primary:disabled{opacity:.72}
+.student-appointment-actions .student-excuse-button{
+ border:1px solid var(--appointment-accent);
+ background:var(--appointment-light);
+ color:var(--appointment-accent);
+}
+.student-appointment-actions .student-excuse-button:hover:not(:disabled){
+ background:color-mix(in srgb,var(--appointment-light),var(--appointment-accent) 12%);
+}
+.student-excuse-form{margin-block-start:12px;padding:12px;border:1px solid var(--line);border-radius:12px}
+.student-excuse-form .field{margin:0}
+@media(max-width:420px){
+ .student-appointments-heading h2{font-size:17px}
+ .student-appointment-actions .btn{flex:1 1 130px}
+}

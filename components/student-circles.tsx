@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {CalendarCheck} from 'lucide-react';
+import {CalendarDays,ChevronDown,CircleCheck,CircleX,Clock3} from 'lucide-react';
 import {fetchWithDeadline} from '../lib/client-request';
 import {beirutDay,TIMEZONE} from '../lib/islamic-calendar';
 import {beirutStart,canExcuse,nextRecitationDay,RECITATION_REPLY_CHANGES,type Slot} from '../lib/individual-recitation';
@@ -12,14 +12,14 @@ type Circle={id:string;name:string;schedule:string;teacher_name:string|null;day:
 type CircleEntry={circle_id:string;circle_name:string;day:string;status:string|null;lesson:Lesson|null};
 type RecitationSlot=Slot&{teacher_name:string};
 type Reply='confirmed'|'excused';
-type AppointmentReply={status:Reply;changes_used?:number};
+type AppointmentReply={status:Reply;changes_used?:number;reason?:string};
 type Recitations={slots:RecitationSlot[];responses:Record<string,AppointmentReply>;reminders:Record<string,unknown>;evaluations:Record<string,Row>};
 type CircleData={appointments:Circle[];history:CircleEntry[]};
 type Appointment={key:string;day:string;minute:number|null;circle?:Circle;slot?:RecitationSlot};
 const appointmentDate=new Intl.DateTimeFormat('ar-LB-u-ca-islamic-umalqura',{timeZone:TIMEZONE,weekday:'long',day:'numeric',month:'long'});
 const clock=new Intl.DateTimeFormat('ar-LB',{timeZone:TIMEZONE,hour:'numeric',minute:'2-digit',hour12:true});
 const attendance:Record<string,string>={present:'حاضر',late:'متأخر',absent:'غائب',excused:'بعذر'};
-const replyLabel:Record<Reply,string>={confirmed:'تم تأكيد الحضور',excused:'تم تسجيل الاعتذار'};
+const replyLabel:Record<Reply,string>={confirmed:'تم تأكيد الحضور',excused:'لقد اعتذرت عن الموعد'};
 async function request<T>(url:string,options?:RequestInit):Promise<T>{
  const response=await fetchWithDeadline(url,{cache:'no-store',...options});
  const data=await response.json() as T&{error?:string};
@@ -39,7 +39,8 @@ function remainingTime(milliseconds:number){
 export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:string;home?:boolean;onOpen:()=>void}){
  const allowed=useServiceAccess(),circlesOn=allowed('circles'),recitationOn=allowed('individual');
  const [circles,setCircles]=useState<CircleData|null>(null),[recitation,setRecitation]=useState<Recitations|null>(null);
- const [circleError,setCircleError]=useState(''),[recitationError,setRecitationError]=useState(''),[replyError,setReplyError]=useState('');
+ const [circleError,setCircleError]=useState(''),[recitationError,setRecitationError]=useState(''),[replyError,setReplyError]=useState<{key:string;message:string}|null>(null);
+ const [excuse,setExcuse]=useState<{key:string;reason:string}|null>(null);
  const [busy,setBusy]=useState(false),[retry,setRetry]=useState(0),[now,setNow]=useState(Date.now);
  const recitationUrl='/api/individual-recitation?mosque='+encodeURIComponent(mosqueId);
  const today=beirutDay(new Date(now));
@@ -69,21 +70,33 @@ export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:st
   .sort((a,b)=>b.day.localeCompare(a.day));
  const pending=(circlesOn&&!circles&&!circleError)||(recitationOn&&!recitation&&!recitationError);
  const errors=[circlesOn?circleError:'',recitationOn?recitationError:''].filter(Boolean);
- async function respond(slot:RecitationSlot,day:string,status:Reply){
-  const reason=status==='excused'?window.prompt('اكتب سبب الاعتذار عن الموعد')?.trim():'';
-  if(status==='excused'&&!reason)return;
-  setBusy(true);setReplyError('');
+ const awaiting=upcoming.filter(({key,slot})=>slot&&!recitationData?.responses[key]).length;
+ async function respond(slot:RecitationSlot,day:string,status:Reply,reason=''){
+  const key=slot.id+':'+day;
+  if(busy)return;
+  if(status==='excused'&&!reason.trim()){
+   setReplyError({key,message:'اكتب سبب الاعتذار عن الموعد.'});
+   return;
+  }
+  setBusy(true);setReplyError(null);
   try{
-   const result=await request<{reply?:AppointmentReply}>('/api/individual-recitation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mosque_id:mosqueId,action:'respond',id:slot.id,day,status,reason})});
-   const key=slot.id+':'+day;
-   setRecitation(data=>data?{...data,responses:{...data.responses,[key]:result.reply??{status,changes_used:(data.responses[key]?.changes_used??0)+(data.responses[key]?1:0)}}}:data);
-  }catch(e){setReplyError((e as Error).message)}finally{setBusy(false)}
+   const result=await request<{reply?:AppointmentReply}>('/api/individual-recitation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mosque_id:mosqueId,action:'respond',id:slot.id,day,status,reason:reason.trim()})});
+   setRecitation(data=>data?{...data,responses:{...data.responses,[key]:{...(result.reply??{status,changes_used:(data.responses[key]?.changes_used??0)+(data.responses[key]?1:0)}),reason:reason.trim()}}}:data);
+   setExcuse(null);
+  }catch(e){setReplyError({key,message:(e as Error).message})}finally{setBusy(false)}
  }
  if(home&&!circlesOn&&!recitationOn)return null;
  return <section className="student-circles" style={{marginBottom:16}}>
-  <div className="panel-heading"><h2>{home?'مواعيدي الأسبوعية':'مواعيدي'}</h2>{home&&<button type="button" className="btn secondary" onClick={onOpen}>عرض كل المواعيد</button>}</div>
+  <details className="panel student-appointments-panel" open>
+   <summary className="student-appointments-heading">
+    <CalendarDays size={23} aria-hidden="true"/>
+    <h2>{home?'مواعيدي الأسبوعية':'مواعيدي'}</h2>
+    {upcoming.length>0&&<span className="student-appointments-near">موعد قريب</span>}
+    {awaiting>0&&<span className="student-appointments-count">{awaiting.toLocaleString('ar-LB')} بانتظار ردّك</span>}
+    <ChevronDown size={20} className="student-appointments-chevron" aria-hidden="true"/>
+   </summary>
+   <div className="student-appointments-body">
   {errors.length>0&&<div className="error" role="alert">{errors.join(' · ')} <button type="button" className="btn secondary" onClick={()=>setRetry(n=>n+1)}>إعادة المحاولة</button></div>}
-  {replyError&&<p className="error" role="alert">{replyError}</p>}
   {pending&&<p role="status">جارٍ تحميل المواعيد…</p>}
   {!pending&&!upcoming.length&&!errors.length&&<p>ما عندك مواعيد قادمة حاليًا.</p>}
   {upcoming.map(({key,day,minute,circle,slot},index)=>{
@@ -94,22 +107,45 @@ export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:st
    const canConfirm=slot&&(!response||mayChange&&response.status==='excused')&&start!==null&&now<start;
    const canCancel=slot&&(!response||mayChange&&response.status==='confirmed')&&beforeDeadline;
    return <article className={'panel student-appointment'+(home&&index===0?' student-appointment-next':'')} key={key}>
-    {home&&index===0&&<span className="eyebrow"><CalendarCheck size={17} aria-hidden="true"/> أقرب موعد</span>}
-    <h3>{circle?.name||'التسميع الفردي'}</h3>
+    <div className="student-appointment-top">
+     <div>
+      <h3>{circle?.name||'التسميع الفردي'}</h3>
+      <AppointmentDate day={day}/>
+     </div>
+     {slot&&<p className={'student-appointment-status '+(response?.status??'waiting')} role="status">
+      {response?.status==='confirmed'?<CircleCheck size={16} aria-hidden="true"/>:response?.status==='excused'?<CircleX size={16} aria-hidden="true"/>:<Clock3 size={16} aria-hidden="true"/>}
+      {response?replyLabel[response.status]:'بانتظار تأكيدك'}
+     </p>}
+    </div>
     {circle?.lesson?.title&&<p><strong>{circle.lesson.title}</strong></p>}
-    <AppointmentDate day={day}/>
-    <p>{start!==null?'الساعة '+clock.format(start).replace(/ ص$/,' صباحًا').replace(/ م$/,' مساءً'):circle?.schedule||'الساعة غير محدّدة'}{(slot?.teacher_name||circle?.teacher_name)&&' · مع الأستاذ '+(slot?.teacher_name||circle?.teacher_name)}</p>
-    {start!==null&&start>now&&<p>المتبقّي {remainingTime(start-now)}</p>}
+    <p className="student-appointment-meta"><Clock3 size={16} aria-hidden="true"/>
+     {start!==null?'الساعة '+clock.format(start).replace(/ ص$/,' صباحًا').replace(/ م$/,' مساءً'):circle?.schedule||'الساعة غير محدّدة'}
+     {(slot?.teacher_name||circle?.teacher_name)&&' · مع الأستاذ '+(slot?.teacher_name||circle?.teacher_name)}
+    </p>
+    {start!==null&&start>now&&<p className="student-appointment-remaining">المتبقّي {remainingTime(start-now)}</p>}
     {slot?.notes&&<p>{slot.notes}</p>}
     {slot&&!response&&Boolean(recitationData?.reminders[key])&&<p className="learning-notice">تنبيه من الإدارة لتأكيد الحضور أو الاعتذار.</p>}
-    {slot&&<p role="status">{response?replyLabel[response.status]:start!==null&&now>=start?'الموعد جارٍ':'موعد قريب بانتظار ردّك'}</p>}
-    {slot&&(canConfirm||canCancel)&&<div className="staff-account-actions">
-     {canConfirm&&<button type="button" className="btn primary" disabled={busy} onClick={()=>respond(slot,day,'confirmed')}>تأكيد الحضور</button>}
-     {canCancel&&<button type="button" className="btn secondary" disabled={busy} onClick={()=>respond(slot,day,'excused')}>اعتذار عن الموعد</button>}
+    {response?.status==='excused'&&response.reason&&<p className="student-appointment-meta">سبب الاعتذار: {response.reason}</p>}
+    {slot&&start!==null&&now<start&&<p className="student-appointment-policy"><small>
+     {response?(remainingChanges===0?'استُخدمت فرص التعديل الثلاث.':'التغييرات المتبقية: '+remainingChanges.toLocaleString('ar-LB')+' من ٣.'):'لديك ٣ فرص لتغيير ردّك بعد تسجيله.'} يتوقّف التعديل قبل الموعد بـ٣٠ دقيقة.
+    </small></p>}
+    {slot&&start!==null&&now<start&&<div className="student-appointment-actions">
+     <button type="button" className="btn primary" disabled={busy||!canConfirm} onClick={()=>respond(slot,day,'confirmed')}><CircleCheck size={18} aria-hidden="true"/>{response?.status==='confirmed'?'الحضور مؤكّد':'تأكيد الحضور'}</button>
+     <button type="button" className="btn student-excuse-button" disabled={busy||!canCancel} aria-expanded={excuse?.key===key} onClick={()=>{setReplyError(null);setExcuse(excuse?.key===key?null:{key,reason:''})}}><CircleX size={18} aria-hidden="true"/>أعتذر عن الموعد</button>
     </div>}
-    {slot&&start!==null&&now<start&&<p className="student-appointment-policy"><small>{response&&<>{remainingChanges===0?'استُخدمت فرص التعديل الثلاث.':'فرص التعديل المتبقية: '+remainingChanges.toLocaleString('ar-LB')+' من ٣.'} </>}يتوقّف تعديل الرد قبل الموعد بـ٣٠ دقيقة.</small></p>}
+    {slot&&canCancel&&excuse?.key===key&&<form className="student-excuse-form" onSubmit={event=>{event.preventDefault();void respond(slot,day,'excused',excuse.reason)}}>
+     <label className="field"><span>سبب الاعتذار</span><textarea rows={3} required maxLength={500} value={excuse.reason} onChange={event=>setExcuse({key,reason:event.target.value})}/></label>
+     <div className="student-appointment-actions">
+      <button type="submit" className="btn student-excuse-button" disabled={busy||!excuse.reason.trim()}>إرسال الاعتذار</button>
+      <button type="button" className="btn secondary" disabled={busy} onClick={()=>{setExcuse(null);setReplyError(null)}}>إلغاء</button>
+     </div>
+    </form>}
+    {replyError?.key===key&&<p className="error" role="alert">{replyError.message}</p>}
    </article>;
   })}
+   {home&&<button type="button" className="btn secondary student-appointments-all" onClick={onOpen}>عرض كل المواعيد</button>}
+   </div>
+  </details>
   {!home&&(circleData?.appointments||[]).filter(circle=>!circle.day).map(circle=><article className="panel" key={circle.id} style={{padding:16,marginTop:12}}><h3>{circle.name}</h3><p>المعلّم: {circle.teacher_name||'غير محدّد'}</p><p>{circle.schedule||'الموعد غير محدّد'}</p></article>)}
   {!home&&<section aria-labelledby="student-appointment-history" style={{marginTop:24}}>
    <h2 id="student-appointment-history">سجل اللقاءات والدروس</h2>
