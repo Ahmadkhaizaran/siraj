@@ -9,7 +9,7 @@ export function summarizeSupervision(students:Row[],attendance:Row[],scores:Row[
   const grouped=new Map<string,Row[]>();for(const score of scores.filter(s=>s.student_id===student.id)){const list=grouped.get(score.series_key||score.series)||[];list.push(score);grouped.set(score.series_key||score.series,list)}
   const comparisons=[...grouped.entries()].map(([series,list])=>{list.sort((a,b)=>a.day.localeCompare(b.day)||String(a.created_at||a.id).localeCompare(String(b.created_at||b.id)));const size=list.length>=6?3:1;const avg=(items:Row[])=>items.reduce((n,r)=>n+r.percent,0)/items.length;const first=avg(list.slice(0,size)),latest=avg(list.slice(-size));return {series:list[0].series,count:list.length,window:size,first,latest,change:list.length>1?latest-first:null,first_day:list[0].day,last_day:list.at(-1)!.day}});
   const verses=memory.filter(m=>m.student_id===student.id).reduce((total,m)=>total+JSON.parse(m.ranges).reduce((n:number,[a,b]:number[])=>n+b-a+1,0),0);
-  return {...student,history,counts,alert:counts.absent>=3,attendance_rate:history.length?Math.round((counts.present+counts.late)/history.length*100):null,comparisons,verses};
+  return {...student,id:student.id,history,counts,alert:counts.absent>=3,attendance_rate:history.length?Math.round((counts.present+counts.late)/history.length*100):null,comparisons,verses};
  });
 }
 export async function supervisionReport(ctx:any){
