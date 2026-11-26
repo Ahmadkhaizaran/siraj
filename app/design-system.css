@@ -177,3 +177,11 @@ html[data-theme="dark"] .student-appointment-status.waiting{background:#493b21;c
 }
 .institution-review-actions{display:grid;gap:10px}
 .institution-review-actions .heading-actions{flex-wrap:wrap;gap:8px}
+
+.circle-form-days{border:1px solid var(--line);border-radius:12px;padding:12px}
+.circle-form-days>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px}
+.circle-form-days label{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--line);border-radius:8px}
+.circle-form-days label:has(input:checked){border-color:var(--focus);background:color-mix(in srgb,var(--white),var(--focus) 10%)}
+.helper-docked .helper-panel{animation:siraj-assistant-open .23s ease-out both}
+@keyframes siraj-assistant-open{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){.helper-docked .helper-panel{animation:none}}

@@ -66,7 +66,7 @@ export async function circleSession(ctx:Row){
   if(user.role!=='primary')fail(403,'موعد الحلقة من صلاحيات المشرف الأساسي');
   let next:CircleSchedule;try{next=validateSchedule(body.schedule)}catch(e){fail(400,(e as Error).message);return}
   const prayers:Row={Fajr:'الفجر',Dhuhr:'الظهر',Asr:'العصر',Maghrib:'المغرب',Isha:'العشاء'};
-  const label=WEEKDAYS[next.weekday]+(next.mode==='day'?' · طوال اليوم':next.mode==='clock'?' · '+next.time:' · بعد أذان '+prayers[next.prayer!]+' بـ '+next.delay+' دقيقة');
+  const label=(next.weekdays??[next.weekday]).map(day=>WEEKDAYS[day]).join('، ')+(next.mode==='day'?' · طوال اليوم':next.mode==='clock'?' · '+next.time:next.mode==='text'?' · '+next.label:' · بعد أذان '+prayers[next.prayer!]+' بـ '+next.delay+' دقيقة');
   await db.batch([q('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',policyKey,JSON.stringify(next)),q('UPDATE circles SET schedule=? WHERE id=?',label,cid),q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',crypto.randomUUID(),mid,user.id,'حُدّد موعد تقييم حلقة '+circle.name,new Date().toISOString())]);
   return json({ok:true});
  }
@@ -95,16 +95,19 @@ export async function circleSession(ctx:Row){
   await db.batch([...(body.append===true?[]:[clear,q('DELETE FROM circle_enrollments WHERE circle_id=?',cid)]),...ids.flatMap(sid=>[q('INSERT OR IGNORE INTO circle_enrollments (circle_id,student_id,created_at) VALUES (?,?,?)',cid,sid,stamp),q('UPDATE students SET circle_id=? WHERE id=? AND mosque_id=? AND circle_id IS NULL',cid,sid,mid)]),q('INSERT INTO activity (id,mosque_id,actor_id,message,created_at) VALUES (?,?,?,?,?)',crypto.randomUUID(),mid,user.id,'حُدّث طلاب حلقة '+circle.name,stamp)]);
   return json({ok:true});
  }
- const day=date(method==='GET'?params.get('date')||(schedule?scheduledCircleDay(schedule.weekday):beirutDay()):body.date);
+ const firstDay=circle.start_date&&circle.start_date>beirutDay()?circle.start_date:beirutDay();
+ const day=date(method==='GET'?params.get('date')||(schedule?scheduledCircleDay(schedule.weekdays??schedule.weekday,firstDay):beirutDay()):body.date);
  const sessionId=cid+':'+day;
  const session=await one('SELECT id,day,revision,updated_at FROM circle_sessions WHERE circle_id=? AND day=?',cid,day);
  const weekStart=weekOf(day),weekEnd=addDays(weekStart,6);
- const weeklySession=await one('SELECT id FROM circle_sessions WHERE circle_id=? AND day>=? AND day<=? LIMIT 1',cid,weekStart,weekEnd);
+ const multi=(schedule?.weekdays?.length??0)>1;
+ const lockStart=multi?day:weekStart,lockEnd=multi?day:weekEnd;
+ const weeklySession=await one('SELECT id FROM circle_sessions WHERE circle_id=? AND day>=? AND day<=? LIMIT 1',cid,lockStart,lockEnd);
  const lessonRow=await one('SELECT value FROM settings WHERE key=?','circle-lesson:'+cid+':'+day);
  const lesson=lessonRow?JSON.parse(lessonRow.value):{title:'',content:''};
  const individualMode=!!await one('SELECT value FROM settings WHERE key=?','circle-individual:'+sessionId);
  const individual=body.individual===true;
- const window=await circleWindow(schedule,day,!!weeklySession&&!individualMode);
+ const window=circle.start_date&&day<circle.start_date?{open:false,reason:'هذا التاريخ يسبق بدء الحلقة.'}:await circleWindow(schedule,day,!!weeklySession&&!individualMode);
  if(method==='GET'){
   const students=await rows("SELECT s.id,s.name,s.quran_level,(SELECT value FROM settings WHERE key='student-tajweed-level:'||s.id) AS tajweed_level,s.status AS student_status,'SRG-'||n.number AS student_code FROM students s LEFT JOIN student_codes n ON n.student_id=s.id WHERE s.mosque_id=? AND s.status!='deleted' AND ((s.status='active' AND "+member+") OR EXISTS (SELECT 1 FROM circle_records cr WHERE cr.student_id=s.id AND cr.session_id=?)) ORDER BY s.name,s.id",mid,cid,cid,sessionId);
   const memoryChanges=await rows('SELECT key,value FROM settings WHERE key LIKE ?','circle-memory:'+sessionId+':%');
@@ -112,10 +115,10 @@ export async function circleSession(ctx:Row){
   const members=await rows("SELECT s.id FROM students s WHERE s.mosque_id=? AND s.status='active' AND "+member,mid,cid,cid);
   const encounters=await rows('SELECT cs.day,cs.revision,(SELECT COUNT(*) FROM circle_records cr WHERE cr.session_id=cs.id) AS students_count FROM circle_sessions cs WHERE cs.circle_id=? ORDER BY cs.day DESC LIMIT 90',cid);
   const memory=await rows('SELECT m.student_id,m.surah,m.ranges,m.revision FROM memorization m JOIN students s ON s.id=m.student_id WHERE s.mosque_id=?',mid);
-  const upcoming=schedule?scheduledCircleDay(schedule.weekday):null;
+  const upcoming=schedule?scheduledCircleDay(schedule.weekdays??schedule.weekday,firstDay):null;
   const report=canReport?await one('SELECT value FROM settings WHERE key=?',reportKey(day)):null;
   const pdf=circle.kind==='religion'?await one('SELECT value FROM settings WHERE key=?',pdfKey(day)+':name'):null;
-  return json({individual_mode:individualMode,lesson,weekly_report:canReport?{week:weekStart,text:report?JSON.parse(report.value).report:'',version:report?.value||''}:null,lesson_pdf:pdf?.value||null,circle,date:day,next_date:upcoming===day&&upcoming===beirutDay()&&weeklySession&&!individualMode?addDays(upcoming,7):upcoming,revision:session?.revision||0,students:students.map(s=>({...s,student_code:user.role==='teacher'?undefined:s.student_code,memory:memory.filter(m=>m.student_id===s.id).map(m=>({...m,ranges:JSON.parse(m.ranges)})),record:records.find(r=>r.student_id===s.id)?{...records.find(r=>r.student_id===s.id),memory_updates:JSON.parse(memoryChanges.find(m=>m.key==='circle-memory:'+sessionId+':'+s.id)?.value||'[]')}:null})),member_ids:members.map(s=>s.id),encounters,schedule,window,can_record:circle.teacher_id===user.id&&window.open,can_enroll:user.role==='primary'});
+  return json({individual_mode:individualMode,lesson,weekly_report:canReport?{week:weekStart,text:report?JSON.parse(report.value).report:'',version:report?.value||''}:null,lesson_pdf:pdf?.value||null,circle,date:day,next_date:upcoming===day&&upcoming===beirutDay()&&weeklySession&&!individualMode?scheduledCircleDay(schedule!.weekdays??schedule!.weekday,addDays(upcoming,1)):upcoming,revision:session?.revision||0,students:students.map(s=>({...s,student_code:user.role==='teacher'?undefined:s.student_code,memory:memory.filter(m=>m.student_id===s.id).map(m=>({...m,ranges:JSON.parse(m.ranges)})),record:records.find(r=>r.student_id===s.id)?{...records.find(r=>r.student_id===s.id),memory_updates:JSON.parse(memoryChanges.find(m=>m.key==='circle-memory:'+sessionId+':'+s.id)?.value||'[]')}:null})),member_ids:members.map(s=>s.id),encounters,schedule,window,can_record:circle.teacher_id===user.id&&window.open,can_enroll:user.role==='primary'});
  }
  if(method!=='POST')fail(405,'العملية غير متاحة');
  if(circle.teacher_id!==user.id)fail(403,'تسجيل حضور وتقييمات الحلقة خاص بالمدرّس أو المشرف المسندة إليه');
@@ -150,7 +153,7 @@ export async function circleSession(ctx:Row){
  const stamp=new Date().toISOString(),token=crypto.randomUUID();
  const authorized="EXISTS (SELECT 1 FROM circles c JOIN mosques m ON m.id=c.mosque_id WHERE c.id=? AND c.teacher_id=? AND c.status='active' AND m.cancelled_at IS NULL AND EXISTS (SELECT 1 FROM settings st WHERE st.key='circle-schedule:'||c.id AND st.value=?) AND NOT EXISTS (SELECT 1 FROM circle_sessions prior WHERE prior.circle_id=c.id AND prior.day>=? AND prior.day<=?"+(individual?" AND prior.id!='"+sessionId.replaceAll("'","''")+"'":'')+"))";
  const gate='EXISTS (SELECT 1 FROM circle_sessions cs WHERE cs.id=? AND cs.write_token=?)';
- const statements=[q('INSERT INTO circle_sessions (id,circle_id,day,revision,write_token,updated_by,updated_at) SELECT ?,?,?,1,?,?,? WHERE '+authorized+' ON CONFLICT(circle_id,day) DO UPDATE SET revision=circle_sessions.revision+1,write_token=excluded.write_token,updated_by=excluded.updated_by,updated_at=excluded.updated_at WHERE '+(individual?'':'circle_sessions.revision=0 AND ')+'circle_sessions.revision=? AND '+authorized,sessionId,cid,day,token,user.id,stamp,cid,user.id,policy!.value,weekStart,weekEnd,body.revision,cid,user.id,policy!.value,weekStart,weekEnd)];
+ const statements=[q('INSERT INTO circle_sessions (id,circle_id,day,revision,write_token,updated_by,updated_at) SELECT ?,?,?,1,?,?,? WHERE '+authorized+' ON CONFLICT(circle_id,day) DO UPDATE SET revision=circle_sessions.revision+1,write_token=excluded.write_token,updated_by=excluded.updated_by,updated_at=excluded.updated_at WHERE '+(individual?'':'circle_sessions.revision=0 AND ')+'circle_sessions.revision=? AND '+authorized,sessionId,cid,day,token,user.id,stamp,cid,user.id,policy!.value,lockStart,lockEnd,body.revision,cid,user.id,policy!.value,lockStart,lockEnd)];
  const required=[0];
  if(individual)statements.push(q('INSERT INTO settings (key,value) SELECT ?,? WHERE '+gate+' ON CONFLICT(key) DO NOTHING','circle-individual:'+sessionId,'1',sessionId,token));
  for(const r of records){
