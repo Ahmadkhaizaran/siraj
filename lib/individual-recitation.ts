@@ -28,6 +28,10 @@ export function nextRecitationDay(slot:Slot,now=Date.now()){
 function matchesRecitationDay(day:string,slot:Slot){
  return /^\d{4}-\d{2}-\d{2}$/.test(day)&&Number.isFinite(Date.parse(day+'T12:00:00Z'))&&new Date(day+'T12:00:00Z').toISOString().slice(0,10)===day&&new Date(day+'T12:00:00Z').getUTCDay()===slot.weekday;
 }
+export function withinRecitationWindow(day:string,now=Date.now()){
+ const today=beirutDay(new Date(now));
+ return day>=today&&day<=addDays(today,3);
+}
 export const RECITATION_REPLY_CHANGES=3;
 export function canExcuse(day:string,minute:number,now=Date.now()){return now<beirutStart(day,minute)-30*60000}
 export async function individualRecitation(ctx:any){
@@ -103,13 +107,14 @@ export async function individualRecitation(ctx:any){
   const day=text(body.day,'التاريخ',10);if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(Date.parse(day+'T12:00:00Z'))||new Date(day+'T12:00:00Z').toISOString().slice(0,10)!==day||new Date(day+'T12:00:00Z').getUTCDay()!==slot.weekday)fail(400,'التاريخ لا يطابق يوم الموعد');
   if(slot.starts_on&&day<slot.starts_on)fail(400,'هذا التاريخ يسبق أول لقاء');
   const k=slot.id+':'+day;if(state.responses[k])fail(409,'ردّ الطالب على هذا اللقاء، لا حاجة للتنبيه');
-  if(Date.now()>=beirutStart(day,slot.minute))fail(409,'بدأ اللقاء أو انتهى؛ لا يمكن إرسال تنبيه');
+  if(!withinRecitationWindow(day)||Date.now()>=beirutStart(day,slot.minute))fail(409,'التنبيه متاح خلال الأيام الثلاثة السابقة للموعد أو يومه قبل بدء اللقاء');
   state.reminders[k]={at:new Date().toISOString(),by:user.id,count:(state.reminders[k]?.count||0)+1};
  }else if(body.action==='respond'){
   if(!studentAccess)fail(403,'تأكيد الحضور أو الاعتذار من حساب الطالب فقط');
   const slot=state.slots.find((s:Slot)=>s.id===body.id);if(!slot)fail(404,'الموعد غير موجود');
   const day=text(body.day,'التاريخ',10);if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(Date.parse(day+'T12:00:00Z'))||new Date(day+'T12:00:00Z').toISOString().slice(0,10)!==day||new Date(day+'T12:00:00Z').getUTCDay()!==slot.weekday)fail(400,'التاريخ لا يطابق يوم الموعد');
   if(slot.starts_on&&day<slot.starts_on)fail(400,'هذا التاريخ يسبق أول لقاء');
+  if(!withinRecitationWindow(day))fail(409,'يمكن الرد خلال الأيام الثلاثة السابقة للموعد أو يومه قبل بدء اللقاء');
   const k=slot.id+':'+day;
   const previous=state.responses[k],changesUsed=previous?.changes_used??0;
   if(Date.now()>=beirutStart(day,slot.minute))fail(409,'بدأ اللقاء؛ تواصل مع المعلّم');

@@ -3,7 +3,7 @@ import {useEffect,useState} from 'react';
 import {CalendarDays,ChevronDown,CircleCheck,CircleX,Clock3} from 'lucide-react';
 import {fetchWithDeadline} from '../lib/client-request';
 import {beirutDay,TIMEZONE} from '../lib/islamic-calendar';
-import {beirutStart,canExcuse,nextRecitationDay,RECITATION_REPLY_CHANGES,type Slot} from '../lib/individual-recitation';
+import {beirutStart,canExcuse,nextRecitationDay,withinRecitationWindow,RECITATION_REPLY_CHANGES,type Slot} from '../lib/individual-recitation';
 import {useServiceAccess} from './service-access';
 
 type Row=Record<string,any>;
@@ -61,10 +61,10 @@ export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:st
  const upcoming:Appointment[]=(circleData?.appointments||[]).flatMap(circle=>circle.day?[{key:'circle:'+circle.id,day:circle.day,minute:circle.minute,circle}]:[]);
  for(const slot of recitationData?.slots||[]){
   const day=nextRecitationDay(slot,now);
-  upcoming.push({key:slot.id+':'+day,day,minute:slot.minute,slot});
+  if(withinRecitationWindow(day,now))upcoming.push({key:slot.id+':'+day,day,minute:slot.minute,slot});
  }
  upcoming.sort((a,b)=>a.day.localeCompare(b.day)||(a.minute??1440)-(b.minute??1440));
- const historyKeys=[...new Set([...Object.keys(recitationData?.evaluations||{}),...Object.keys(recitationData?.responses||{})])]
+ const historyKeys=Object.keys(recitationData?.evaluations||{})
   .map(key=>({key,day:key.slice(-10),slot:recitationData?.slots.find(slot=>slot.id===key.slice(0,-11))}))
   .filter(item=>item.day<today||item.day===today&&(!item.slot||beirutStart(item.day,item.slot.minute)+(item.slot.duration??30)*60000<=now))
   .sort((a,b)=>b.day.localeCompare(a.day));
@@ -110,7 +110,7 @@ export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:st
    <div className="student-appointments-body">
   {errors.length>0&&<div className="error" role="alert">{errors.join(' · ')} <button type="button" className="btn secondary" onClick={()=>setRetry(n=>n+1)}>إعادة المحاولة</button></div>}
   {pending&&<p role="status">جارٍ تحميل المواعيد…</p>}
-  {!pending&&!upcoming.length&&!errors.length&&<p>ما عندك مواعيد قادمة حاليًا.</p>}
+  {!pending&&!upcoming.length&&!errors.length&&<p>ما عندك مواعيد قريبة حاليًا.</p>}
   {upcoming.map(({key,day,minute,circle,slot},index)=>{
    const start=minute===null?null:beirutStart(day,minute),response=slot?recitationData?.responses[key]:undefined;
    const remainingChanges=Math.max(0,RECITATION_REPLY_CHANGES-(response?.changes_used??0));
@@ -170,11 +170,11 @@ export default function StudentCircles({mosqueId,home=false,onOpen}:{mosqueId:st
     {entry.status&&<p>الحضور: {attendance[entry.status]||entry.status}</p>}
    </article>)}
    {historyKeys.map(({key,day,slot})=>{
-    const evaluation=recitationData?.evaluations[key],response=recitationData?.responses[key];
+    const evaluation=recitationData?.evaluations[key];
     return <article className="panel" key={key} style={{padding:16,marginTop:12}}>
      <h3>التسميع الفردي</h3><AppointmentDate day={day}/>
      {slot?.teacher_name&&<p>المعلّم: {slot.teacher_name}</p>}
-     {response&&<p>{replyLabel[response.status]}</p>}{evaluation&&<RecitationEvaluation evaluation={evaluation}/>}
+     {evaluation&&<RecitationEvaluation evaluation={evaluation}/>}
     </article>;
    })}
   </section>}

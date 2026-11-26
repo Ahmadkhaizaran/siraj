@@ -144,7 +144,7 @@ export async function handle(req:Request,runtime?:SirajRuntime){
    if(method!=='POST')fail(405,'طريقة غير متاحة');
    const c=body.config,keys=new Set<string>(SERVICES.map(s=>s[0]));
    const flags=(v:any)=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.entries(v).every(([k,x])=>keys.has(k)&&typeof x==='boolean');
-   if(!c||!flags(c.global)||!c.mosques||typeof c.mosques!=='object'||Array.isArray(c.mosques)||Object.keys(c).some(k=>!['global','mosques'].includes(k)))fail(400,'إعدادات الخدمات غير صالحة');
+   if(!c||!flags(c.global)||(c.institutionDefaults!==undefined&&!flags(c.institutionDefaults))||!c.mosques||typeof c.mosques!=='object'||Array.isArray(c.mosques)||Object.keys(c).some(k=>!['global','institutionDefaults','mosques'].includes(k)))fail(400,'إعدادات الخدمات غير صالحة');
    for(const [mid,v] of Object.entries(c.mosques) as [string,any][]){
     if(!await one('SELECT id FROM mosques WHERE id=?',mid))fail(400,'الجهة غير موجودة');
     if(!v||!flags(v.all)||!flags(v.students)||Object.keys(v).some(k=>!['all','students','roles','users'].includes(k)))fail(400,'نطاق تحكم غير صالح');
